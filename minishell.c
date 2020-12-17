@@ -92,7 +92,7 @@ int
 main(void){
 	char buf[1024];
 
-	printf("msh> ");	
+	printf("==> ");	
 	while (fgets(buf, 1024, stdin)) {
 		
 		line = tokenize(buf);
