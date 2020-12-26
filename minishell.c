@@ -12,7 +12,7 @@
 tline *line;
 
 void
-xcd(void){
+ExecuteCD(void){
 	char *home;
 	int e;
 	
@@ -41,7 +41,7 @@ closePipes(int **p){
 }
 
 void
-x(void){
+Ejecutar(void){
 	int i;
 	pid_t pid;
 	int **p;
@@ -100,9 +100,9 @@ main(void){
 			continue;
 		}
 		if(strcmp(line->commands[0].argv[0],"cd")==0){
-			xcd();
+            ExecuteCD();
 		}else{
-			x();
+            Ejecutar();
 		}
 		printf("==> ");
 	}

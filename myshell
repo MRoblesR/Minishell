@@ -1,160 +1,200 @@
-#include <stdio.h>
-#include <sys/types.h>
-#include <unistd.h>
 #include "parser.h"
+#include <fcntl.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <sys/types.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
-#include <string.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
+#include <unistd.h>
 
 tline *line;
 
 void
-xcd(void){
-	char *home;
-	int e;
-	
-	if(line->commands[0].argv[1]==NULL){
-		home = getenv("HOME");
-		e=chdir(home);
-		if (e<0){
-			fprintf(stderr,"error al cambiar de directorio\n");
-	}}else{
-		e=chdir(line->commands[0].argv[1]);
-		if (e<0){
-			fprintf(stderr, "error %s\n",line->commands[0].argv[1]);
-		}
-	
-	}
+ExecuteCD(void) {
+    char *dir;
+    int errorInt;
+
+    if (line->commands[0].argv[1] == NULL) {
+        dir = getenv("HOME");
+
+    } else {
+        dir = line->commands[0].argv[1];
+    }
+
+    errorInt = chdir(dir);
+    if (errorInt < 0) {
+        fprintf(stderr, "Error, no se pudo cambiar al directorio: %s\n", dir);
+    }
+}
+
 }
 
 void
-closePipes(int **p){
-	int i;
-	for(i=0;i<line->ncommands-1;i++){
-		close(p[i][0]);
-		close(p[i][1]);
-	}
-	free(p);
+closePipes(int **arrayPipes) {
+    int contador;
+    for (contador = 0; contador < line->ncommands - 1; contador++) {
+        close(arrayPipes[contador][0]);
+        close(arrayPipes[contador][1]);
+    }
+    free(arrayPipes);
+}
+
+
+int **CrearArrayPipes() {
+    int **arrayPipes;
+    int contador;
+    if (line->ncommands > 1) {
+        return NULL;
+    } else {
+        arrayPipes = malloc(sizeof(int *) * line->ncommands - 1);
+        for (contador = 0; contador < line->ncommands - 1; contador++) {
+            arrayPipes[contador] = malloc(sizeof(int) * 2); //todo esto parece demasiado avanzado
+            pipe(arrayPipes[contador]);
+        }
+        return arrayPipes;
+    }
+}
+
+int RevisarErrores(int pid, int contador, int tipo, int fileDescriptor) {
+    switch (tipo) {
+        case 1:
+            if (pid < 0) {
+                fprintf(stderr, "Error, fallo al crear el hijo\n");
+                exit(1);
+            }
+            break;
+        case 2:
+            if (line->commands[contador].filename == NULL) {
+                fprintf(stderr, "Error, no se encuentra el mandato %s\n", line->commands[contador].argv[0]);
+                exit(2);
+            }
+            break;
+        case 3:
+            if (fileDescriptor < 0) {
+                fprintf(stderr, "error al abrir el fichero %s\n",line->redirect_input);
+                exit(3);
+            }
+            break;
+        case 4:
+            if (fileDescriptor < 0) {
+                fprintf(stderr, "error al crear el fichero %s\n",line->redirect_output);
+                exit(4);
+            }
+            break;
+        case 5:
+            if (fileDescriptor < 0) {
+                fprintf(stderr, "error al crear el fichero%s\n",line->redirect_error);
+                exit(5);
+            }
+            break;
+        default:
+            fprintf(stderr, "error, este error no está definido\n");
+            exit(100);
+    }
+    return 0;
+}
+
+
+void
+Ejecutar(void) {
+    int **arrayPipes;
+    int *arrayPIDs;
+    int fileDescriptor;
+    int contador;
+    pid_t pid;
+
+    arrayPIDs = malloc(sizeof(pid_t) * line->ncommands);
+
+    arrayPipes = CrearArrayPipes();
+
+    for (contador = 0; contador < line->ncommands; contador++) {
+        pid = fork();
+        RevisarErrores(pid, contador, 1);
+        arrayPIDs[contador] = pid;
+        if (pid == 0) {
+            if (line->background == 1) {
+                signal(SIGINT, SIG_DFL); //todo revisar
+                signal(SIGQUIT, SIG_DFL);
+            }
+            RevisarErrores(pid, contador, 2);
+            if ((contador == 0) && (line->redirect_input != NULL)) {
+                fileDescriptor = open(line->redirect_input, O_RDONLY);
+                RevisarErrores(pid, contador, 3, fileDescriptor);
+            }
+            dup2(fileDescriptor, 0);//todo esto no iría dentro del if? y no sería 1?
+            close(fileDescriptor);
+        }
+        if ((contador == line->ncommands - 1) && (line->redirect_output != NULL)) {//todo esto se tiene que ejecutar para el padre y el hijo?
+            fileDescriptor = create(line->redirect_output, 0644);// todo qué es esto?
+            RevisarErrores(pid, contador, 4, fileDescriptor);
+
+            dup2(fileDescriptor, 1);//todo El 1 no era el de entrada?
+            close(fileDescriptor);
+        }
+        if ((contador == line->ncommands - 1) && (line->redirect_error != NULL)) { // todo El stderr va aqui o al principio para que se manden todos los errores?
+            fileDescriptor = create(line->redirect_error, 0644);
+            RevisarErrores(pid, contador, 5, fileDescriptor);
+            dup2(fileDescriptor, 2);
+            close(fileDescriptor);
+        }
+        if (line->ncommands > 1) {
+            if (contador == 0) {
+                dup2(arrayPipes[0][1], 1);
+            } else if (contador == (line->ncommands - 1)) {
+                dup2(arrayPipes[contador - 1][0], 0);
+            } else {
+                dup2(arrayPipes[contador][1], 1);
+                dup2(arrayPipes[contador - 1][0], 0);
+            }
+            closePipes(arrayPipes);
+        }
+        execvp(line->commands[contador].filename, line->commands[contador].argv);
+        exit(1);//todo ?????
+    }
+    if (line->ncommands > 1) {
+        closePipes(arrayPipes);
+    }
+    if (!line->background) {
+        for (contador = 0;contador < line->ncommands;contador++) {
+            waitpid(arrayPIDs[contador], NULL, 0);
+        }
+    } else {
+        for (contador = 0;contador < line->ncommands;contador++) {
+            printf("[%d]\n", arrayPIDs[contador]);//todo ????
+        }
+    }
+    free(arrayPIDs);
 }
 
 void
-x(void){
-	int i;
-	pid_t pid;
-	int **p;
-	int fd;
-	int *pids;
-	pids = malloc(sizeof(pid_t)*line->ncommands);
-	if (line->ncommands>1){
-		p=malloc(sizeof(int*)*line->ncommands-1);
-		for(i=0;i<line->ncommands-1;i++){
-			p[i]=malloc(sizeof(int)*2);
-			pipe(p[i]);
-		}
-	}
-
-	for(i=0;i<line->ncommands;i++){
-		pid=fork();
-		if (pid<0){
-			fprintf(stderr, "error al crear el hijo\n");
-			exit(1);	
-		}
-		pids[i]=pid;
-		if (pid==0){
-			if (!line->background){
-				signal(SIGINT,SIG_DFL);
-				signal(SIGQUIT,SIG_DFL);
-			}
-			if (line->commands[i].filename==NULL){
-				fprintf(stderr,"%s:No se encuentra el mandato\n", line->commands[i].argv[0]);
-				exit(1);
-			}
-			if((i==0)&&(line->redirect_input!=NULL)){
-				fd = open(line->redirect_input,O_RDONLY);
-				if (fd<0){
-					fprintf(stderr,"error al abrir el fichero");
-					exit(1);
-				}
-				dup2(fd,0);
-				close(fd);
-			}
-			if ((i==line->ncommands-1)&&(line->redirect_output!=NULL)){
-				fd = creat(line->redirect_output,0644);
-				if(fd<0){
-					fprintf(stderr,"error al crear el fichero");
-					exit(1);
-				}
-				dup2(fd,1);
-				close(fd);
-			}
-			if ((i==line->ncommands-1)&&(line->redirect_error!=NULL)){
-				fd = creat(line->redirect_error,0644);
-				if(fd<0){
-					fprintf(stderr,"error al crear el fichero");
-					exit(1);
-				}
-				dup2(fd,2);
-				close(fd);
-			} 
-			if (line->ncommands>1){
-				if(i==0){
-					dup2(p[0][1],1);
-				}else if(i==(line->ncommands-1)){
-					dup2(p[i-1][0],0);
-				}else{
-					dup2(p[i][1],1);
-					dup2(p[i-1][0],0);
-				}
-				closePipes(p);
-			}
-			execvp(line->commands[i].filename,line->commands[i].argv);
-			exit(1);
-		}
-	}
-	if(line->ncommands>1){
-		closePipes(p);
-	}
-	if (!line->background){
-		for(i=0;i<line->ncommands;i++){
-		waitpid(pids[i],NULL,0);
-		}
-	}else{
-		for(i=0;i<line->ncommands;i++){
-			printf("[%d]\n",pids[i]);
-		}
-	}
-	free(pids);
+manejador(int sig) {
+    waitpid(WAIT_ANY, NULL, WNOHANG);
 }
 
-void
-manejador(int sig){
-	waitpid(WAIT_ANY,NULL,WNOHANG);
-}
 int
-main(void){
-	char buf[1024];
+main(void) {
+    char buffer[1024];
 
-	printf("==> ");	
-	signal(SIGINT,SIG_IGN);
-	signal(SIGQUIT,SIG_IGN);
-	signal(SIGCHLD,manejador);
-	while (fgets(buf, 1024, stdin)) {
-		
-		line = tokenize(buf);
-		if (line==NULL) {
-			continue;
-		}
-		if(strcmp(line->commands[0].argv[0],"cd")==0){
-			xcd();
-		}else{
-			x();
-		}
-		printf("\n==>");
-	}
-	return 0;
+    printf("msh> ");
+    signal(SIGINT, SIG_IGN);
+    signal(SIGQUIT, SIG_IGN);
+    signal(SIGCHLD, manejador);
+    while (fgets(buffer, 1024, stdin)) {
+
+        line = tokenize(buffer);
+        if (line == NULL) {
+            continue;
+        }
+        if (strcmp(line->commands[0].argv[0], "cd") == 0) {
+            ExecuteCD();
+        } else {
+            Ejecutar();
+        }
+        printf("\nmsh>");
+    }
+    return 0;
 }
