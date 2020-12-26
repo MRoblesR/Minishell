@@ -116,7 +116,10 @@ Ejecutar(void) {
         RevisarErrores(pid, contador, 1);
         arrayPIDs[contador] = pid;
         if (pid == 0) {
-            if (line->background == 1) {
+        //si no hay background se activan las señales
+        //background=0 no hay
+        //background=1 si hay
+            if (line->background == 0) {
                 signal(SIGINT, SIG_DFL); //todo revisar
                 signal(SIGQUIT, SIG_DFL);
             }
@@ -124,19 +127,20 @@ Ejecutar(void) {
             if ((contador == 0) && (line->redirect_input != NULL)) {
                 fileDescriptor = open(line->redirect_input, O_RDONLY);
                 RevisarErrores(pid, contador, 3, fileDescriptor);
+                
+                dup2(fileDescriptor, 0);
+                close(fileDescriptor);
             }
-            dup2(fileDescriptor, 0);//todo esto no iría dentro del if? y no sería 1?
-            close(fileDescriptor);
         }
         if ((contador == line->ncommands - 1) && (line->redirect_output != NULL)) {//todo esto se tiene que ejecutar para el padre y el hijo?
-            fileDescriptor = create(line->redirect_output, 0644);// todo qué es esto?
+            fileDescriptor = creat(line->redirect_output, 0644);
             RevisarErrores(pid, contador, 4, fileDescriptor);
 
-            dup2(fileDescriptor, 1);//todo El 1 no era el de entrada?
+            dup2(fileDescriptor, 1);
             close(fileDescriptor);
         }
         if ((contador == line->ncommands - 1) && (line->redirect_error != NULL)) { // todo El stderr va aqui o al principio para que se manden todos los errores?
-            fileDescriptor = create(line->redirect_error, 0644);
+            fileDescriptor = creat(line->redirect_error, 0644);
             RevisarErrores(pid, contador, 5, fileDescriptor);
             dup2(fileDescriptor, 2);
             close(fileDescriptor);
