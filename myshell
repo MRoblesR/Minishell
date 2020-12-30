@@ -192,6 +192,7 @@ void Ejecutar(void) {
 
         GestionarPipesIO(arrayPipes, contador);
 
+
         execvp(line->commands[contador].filename, line->commands[contador].argv);
         exit(1);//todo ?????
     }
