@@ -13,50 +13,53 @@
 
 tline *line;
 
-int RevisarErrores(int tipo, int contador, int errorCode, int fileDescriptor, int pid) {
-    switch (tipo) {
-        case 1:
-            if (pid < 0) {
-                fprintf(stderr, "Error, fallo al crear el hijo\n");
-                exit(1);
-            }
-            break;
-        case 2:
-            if (line->commands[contador].filename == NULL) {
-                fprintf(stderr, "Error, no se encuentra el mandato %s\n", line->commands[contador].argv[0]);
-                exit(2);
-            }
-            break;
-        case 3:
-            if (fileDescriptor < 0) {
-                fprintf(stderr, "error al abrir el fichero %s\n", line->redirect_input);
-                exit(3);
-            }
-            break;
-        case 4:
-            if (fileDescriptor < 0) {
-                fprintf(stderr, "error al crear el fichero %s\n", line->redirect_output);
-                exit(4);
-            }
-            break;
-        case 5:
-            if (fileDescriptor < 0) {
-                fprintf(stderr, "error al crear el fichero%s\n", line->redirect_error);
-                exit(5);
-            }
-            break;
-        case 6:
-            if (errorCode < 0) {
-                fprintf(stderr, "Se produjo un erro en las redirecciones(dup2)");
-                exit(6);
-            }
-            break;
-
-        default:
-            fprintf(stderr, "error, este error no está definido\n");
-            exit(100);
+void RevisarErrorFork(int pid) {
+    if (pid < 0) {
+        fprintf(stderr, "Error, fallo al crear el hijo\n");
+        exit(1);
     }
-    return 0;
+}
+
+void RevisarErrorMandato(int contador) {
+    if (line->commands[contador].filename == NULL) {
+        fprintf(stderr, "Error, no se encuentra el mandato %s\n", line->commands[contador].argv[0]);
+        exit(2);
+    }
+}
+
+void RevisarErrorAperturaFichero(int fileDescriptor) {
+    if (fileDescriptor < 0) {
+        fprintf(stderr, "error al abrir el fichero %s\n", line->redirect_input);
+        exit(3);
+    }
+}
+
+void RevisarErrorCreacionFicheroStdout(int fileDescriptor) {
+    if (fileDescriptor < 0) {
+        fprintf(stderr, "error al crear el fichero %s\n", line->redirect_output);
+        exit(4);
+    }
+}
+
+void RevisarErrorCreacionFicheroStderr(int fileDescriptor) {
+    if (fileDescriptor < 0) {
+        fprintf(stderr, "error al crear el fichero%s\n", line->redirect_error);
+        exit(5);
+    }
+}
+
+void RevisarErrorDup2(int errorCode) {
+    if (errorCode < 0) {
+        fprintf(stderr, "Se produjo un erro en las redirecciones(dup2)");
+        exit(6);
+    }
+}
+
+
+void RevisarErrorCd(const char *dir, int errorInt) {
+    if (errorInt < 0) {
+        fprintf(stderr, "Error, no se pudo cambiar al directorio: %s\n", dir);
+    }
 }
 
 void ExecuteCD(void) {
@@ -71,9 +74,7 @@ void ExecuteCD(void) {
     }
 
     errorInt = chdir(dir);
-    if (errorInt < 0) {
-        fprintf(stderr, "Error, no se pudo cambiar al directorio: %s\n", dir);
-    }
+    RevisarErrorCd(dir, errorInt);
 }
 
 
@@ -93,9 +94,9 @@ int **CrearArrayPipes() {
     if (line->ncommands > 1) {
         return NULL;
     } else {
-        arrayPipes = (int **)malloc(sizeof(int *) * line->ncommands - 1);
+        arrayPipes = (int **) malloc(sizeof(int *) * line->ncommands - 1);
         for (contador = 0; contador < line->ncommands - 1; contador++) {
-            arrayPipes[contador] = (int *)malloc(sizeof(int) * 2);
+            arrayPipes[contador] = (int *) malloc(sizeof(int) * 2);
             pipe(arrayPipes[contador]);
         }
         return arrayPipes;
@@ -103,23 +104,24 @@ int **CrearArrayPipes() {
 }
 
 
-void GestionarRedireccionesSalidaFichero(int fileDescriptor, int contador, pid_t &pid) {
+void GestionarRedireccionesSalidaFichero(int contador) {
     int error = 0;
+    int fileDescriptor;
     if (contador == line->ncommands - 1) {
         if (line->redirect_output != NULL) {
             fileDescriptor = create(line->redirect_output, 0644);
-            RevisarErrores(4, contador, 0, fileDescriptor, pid);
+            RevisarErrorCreacionFicheroStdout(fileDescriptor);
 
             error = dup2(fileDescriptor, 1);
-            RevisarErrores(6, 0, error, NULL, 0);
+            RevisarErrorDup2(errorCode);
             close(fileDescriptor);
         }
         if (line->redirect_error != NULL) {
             fileDescriptor = create(line->redirect_error, 0644);
-            RevisarErrores(5, contador, 0, fileDescriptor, pid);
+            RevisarErrorCreacionFicheroStderr(fileDescriptor);
 
             error = dup2(fileDescriptor, 2);
-            RevisarErrores(6, 0, error, NULL, 0);
+            RevisarErrorDup2(errorCode);
             close(fileDescriptor);
         }
     }
@@ -136,32 +138,34 @@ void GestionarPipesIO(int **arrayPipes, int contador) {
             error = dup2(arrayPipes[contador][1], 1);
             error += dup2(arrayPipes[contador - 1][0], 0);
         }
-        RevisarErrores(6, 0, error, NULL, 0);
+        RevisarErrorDup2(errorCode);
         closePipes(arrayPipes);
     }
 }
 
-void GestionarRedireccionesEntradaFichero(int fileDescriptor, int contador, const pid_t &pid, int error) {
+void GestionarRedireccionesEntradaFichero(int contador) {
+    int error=0;
+    int fileDescriptor;
     if ((contador == 0) && (line->redirect_input != NULL)) {
         fileDescriptor = open(line->redirect_input, O_RDONLY);
-        RevisarErrores(3, contador, 0, fileDescriptor, pid);
+        RevisarErrorAperturaFichero(fileDescriptor);
 
         error = dup2(fileDescriptor, 0);
-        RevisarErrores(6, 0, error, NULL, 0);
+        RevisarErrorDup2(errorCode);
         close(fileDescriptor);
     }
 }
 
-void AjustarProcesoHijo(int fileDescriptor, int contador, const pid_t &pid, int error) {
+void AjustarProcesoHijo(int contador) {
     if (line->background == 1) {
         signal(SIGINT, SIG_DFL);
         signal(SIGQUIT, SIG_DFL);
     }
-    RevisarErrores(2, contador, 0, 0, pid);
-    GestionarRedireccionesEntradaFichero(fileDescriptor, contador, pid, error);
+    RevisarErrorMandato(contador);
+    GestionarRedireccionesEntradaFichero(contador);
 }
 
-void EsperarHijos(const int *arrayPIDs) {
+void EsperarHijos(int *arrayPIDs) {
     int contador;
     for (contador = 0; contador < line->ncommands; contador++) {
         waitpid(arrayPIDs[contador], NULL, 0);
@@ -182,16 +186,15 @@ void Ejecutar(void) {
 
     for (contador = 0; contador < line->ncommands; contador++) {
         pid = fork();
-        RevisarErrores(1, contador, 0, 0, pid);
+        RevisarErrorFork(pid);
         arrayPIDs[contador] = pid;
         if (pid == 0) {
-            AjustarProcesoHijo(fileDescriptor, contador, pid, error);
+            AjustarProcesoHijo(contador);
         }
 
-        GestionarRedireccionesSalidaFichero(fileDescriptor, contador, pid);
+        GestionarRedireccionesSalidaFichero(contador);
 
         GestionarPipesIO(arrayPipes, contador);
-
 
         execvp(line->commands[contador].filename, line->commands[contador].argv);
         exit(1);//todo ?????
