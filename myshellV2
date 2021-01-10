@@ -11,65 +11,177 @@
 #include <unistd.h>
 #include <unistd.h>
 
-tline *line;
 
-void RevisarErrorFork(int pid){
-    if (pid < 0){
+struct nodo {
+    struct nodo *sig;
+    tline *contenido;
+    pid_t pid;
+};
+
+typedef struct nodo Nodo;
+
+/*Metodos nodo*/
+
+/*Getters nodo*/
+Nodo *getSigNodo(Nodo *pNodo) {
+    return pNodo->sig;
+}
+
+
+/*Setters nodo*/
+void setSigNodo(Nodo *pNodo, Nodo *sig) {
+    pNodo->sig = sig;
+}
+
+
+Nodo *CrearNodo(char *valor, pid_t pid) {
+    Nodo *newNodo = (Nodo *) malloc(sizeof(Nodo));
+    newNodo->sig = NULL;
+    newNodo->contenido = tokenize(valor);//todo dudo que sea correcto
+    newNodo->pid_t = pid;
+    return newNodo;
+}
+
+void MostrarLinea(Nodo *pNodo) {
+    //todo corregir el formato
+    int i, j;
+    if (pNodo->contenido->redirect_input != NULL) {
+        printf("%s > ", pNodo->contenido->redirect_input);
+    }
+    for (i = 0; i < pNodo->contenido->ncommands; i++) {
+        printf("%s ", pNodo->contenido->commands[i].filename);
+        printf("%s ", pNodo->contenido->commands[i].argv);
+    }
+    if (pNodo->contenido->redirect_output != NULL) {
+        printf("1>%s  ", pNodo->contenido->redirect_output);
+    }
+    if (pNodo->contenido->redirect_error != NULL) {
+        printf("2> %s ", pNodo->contenido->redirect_error);
+    }
+    printf("\n");
+}
+
+void destruirNodo(Nodo *pNodo) {
+    if (pNodo == NULL) {
+        free(pNodo);
+    } else {
+        free(pNodo->contenido->commands);
+        free(pNodo->contenido);
+        free(pNodo);
+    }
+}
+
+
+/*---------------------Lista--------------------*/
+struct lista {
+    struct nodo *head;
+};
+
+typedef struct lista Lista;
+
+/*Metodos Lista*/
+
+Lista *InicializarLista() {
+    Lista *newList = (Lista *) malloc(sizeof(Lista));
+    newList->head = NULL;
+    return newList;
+}
+
+
+Lista *AnnadirNodoALaCola(Lista *pLista, char *valor, pid_t pid) {
+    Nodo *newNodo = CrearNodo(valor, pid);
+    newNodo->sig = pLista->head;
+    pLista->head = newNodo;
+    return pLista;
+}
+
+
+void MostrarLista(Lista *pLista) {
+    Nodo *cursor;
+    cursor = pLista->head;
+    while (cursor != NULL) {
+        MostrarLinea(cursor);
+        cursor = getSigNodo(cursor);
+    }
+}
+
+void destruirLista(Lista *pLista) {
+    Nodo *nodoBorrar;
+    Nodo *nodo;
+    if (pLista == NULL) {
+        free(pLista);
+    } else {
+        nodo = pLista->head;
+        while (nodo != NULL) {
+            nodoBorrar = nodo;
+            nodo = getSigNodo(nodo);
+            destruirNodo(nodoBorrar);
+        }
+        free(pLista);
+    }
+}
+
+
+tline *line; //todo podriamos poner esto como no global
+
+
+void RevisarErrorFork(int pid) {
+    if (pid < 0) {
         fprintf(stderr, "Error, fallo al crear el hijo\n");
         exit(1);
     }
 }
 
-void RevisarErrorMandato(int contador){
-    if (line->commands[contador].filename == NULL){
+void RevisarErrorMandato(int contador) {
+    if (line->commands[contador].filename == NULL) {
         fprintf(stderr, "%s: No se encuentra el mandato\n", line->commands[contador].argv[0]);
         exit(2);
     }
 }
 
-void RevisarErrorAperturaFichero(int fileDescriptor){
-    if (fileDescriptor < 0){
+void RevisarErrorAperturaFichero(int fileDescriptor) {
+    if (fileDescriptor < 0) {
         fprintf(stderr, "error al abrir el fichero %s\n", line->redirect_input);
         exit(3);
     }
 }
 
-void RevisarErrorCreacionFicheroStdout(int fileDescriptor){
-    if (fileDescriptor < 0){
+void RevisarErrorCreacionFicheroStdout(int fileDescriptor) {
+    if (fileDescriptor < 0) {
         fprintf(stderr, "error al crear el fichero %s\n", line->redirect_output);
         exit(4);
     }
 }
 
-void RevisarErrorCreacionFicheroStderr(int fileDescriptor){
-    if (fileDescriptor < 0){
+void RevisarErrorCreacionFicheroStderr(int fileDescriptor) {
+    if (fileDescriptor < 0) {
         fprintf(stderr, "error al crear el fichero%s\n", line->redirect_error);
         exit(5);
     }
 }
 
-void RevisarErrorDup2(int errorCode){
-    if (errorCode < 0){
+void RevisarErrorDup2(int errorCode) {
+    if (errorCode < 0) {
         fprintf(stderr, "Se produjo un error en las redirecciones(dup2)");
         exit(6);
     }
 }
 
 
-void RevisarErrorCd(const char *dir, int errorInt){
-    if (errorInt < 0){
+void RevisarErrorCd(const char *dir, int errorInt) {
+    if (errorInt < 0) {
         fprintf(stderr, "Error, no se pudo cambiar al directorio: %s\n", dir);
     }
 }
 
-void ExecuteCD(void){
+void ExecuteCD(void) {
     char *dir;
     int errorInt;
 
-    if (line->commands[0].argv[1] == NULL){
+    if (line->commands[0].argv[1] == NULL) {
         dir = getenv("HOME");
 
-    }else{
+    } else {
         dir = line->commands[0].argv[1];
     }
 
@@ -78,9 +190,9 @@ void ExecuteCD(void){
 }
 
 
-void closePipes(int **arrayPipes){
+void closePipes(int **arrayPipes) {
     int contador;
-    for (contador = 0; contador < line->ncommands - 1; contador++){
+    for (contador = 0; contador < line->ncommands - 1; contador++) {
         close(arrayPipes[contador][0]);
         close(arrayPipes[contador][1]);
     }
@@ -88,14 +200,14 @@ void closePipes(int **arrayPipes){
 }
 
 
-int **CrearArrayPipes(){
+int **CrearArrayPipes() {
     int **arrayPipes;
     int contador;
-    if (line->ncommands > 1){
+    if (line->ncommands > 1) {
         return NULL;
-    }else{
+    } else {
         arrayPipes = (int **) malloc(sizeof(int *) * line->ncommands - 1);
-        for (contador = 0; contador < line->ncommands - 1; contador++){
+        for (contador = 0; contador < line->ncommands - 1; contador++) {
             arrayPipes[contador] = (int *) malloc(sizeof(int) * 2);
             pipe(arrayPipes[contador]);
         }
@@ -104,11 +216,11 @@ int **CrearArrayPipes(){
 }
 
 
-void GestionarRedireccionesSalidaFichero(int contador){
+void GestionarRedireccionesSalidaFichero(int contador) {
     int errorCode = 0;
     int fileDescriptor;
-    if (contador == line->ncommands - 1){
-        if (line->redirect_output != NULL){
+    if (contador == line->ncommands - 1) {
+        if (line->redirect_output != NULL) {
             fileDescriptor = creat(line->redirect_output, 0644);
             RevisarErrorCreacionFicheroStdout(fileDescriptor);
 
@@ -119,11 +231,11 @@ void GestionarRedireccionesSalidaFichero(int contador){
     }
 }
 
-void GestionarRedireccionesErrorFichero(int contador){
+void GestionarRedireccionesErrorFichero(int contador) {
     int errorCode = 0;
     int fileDescriptor;
-    if (contador == line->ncommands - 1){
-        if (line->redirect_error != NULL){
+    if (contador == line->ncommands - 1) {
+        if (line->redirect_error != NULL) {
             fileDescriptor = creat(line->redirect_error, 0644);
             RevisarErrorCreacionFicheroStderr(fileDescriptor);
 
@@ -134,14 +246,14 @@ void GestionarRedireccionesErrorFichero(int contador){
     }
 }
 
-void GestionarPipesIO(int **arrayPipes, int contador){
+void GestionarPipesIO(int **arrayPipes, int contador) {
     int errorCode = 0;
-    if (line->ncommands > 1){
-        if (contador == 0){
+    if (line->ncommands > 1) {
+        if (contador == 0) {
             errorCode = dup2(arrayPipes[0][1], 1);
-        } else if (contador == (line->ncommands - 1)){
+        } else if (contador == (line->ncommands - 1)) {
             errorCode = dup2(arrayPipes[contador - 1][0], 0);
-        } else{
+        } else {
             errorCode = dup2(arrayPipes[contador][1], 1);
             errorCode += dup2(arrayPipes[contador - 1][0], 0);
         }
@@ -150,10 +262,10 @@ void GestionarPipesIO(int **arrayPipes, int contador){
     }
 }
 
-void GestionarRedireccionesEntradaFichero(int contador){
+void GestionarRedireccionesEntradaFichero(int contador) {
     int errorCode = 0;
     int fileDescriptor;
-    if ((contador == 0) && (line->redirect_input != NULL)){
+    if ((contador == 0) && (line->redirect_input != NULL)) {
         fileDescriptor = open(line->redirect_input, O_RDONLY);
         RevisarErrorAperturaFichero(fileDescriptor);
 
@@ -163,22 +275,37 @@ void GestionarRedireccionesEntradaFichero(int contador){
     }
 }
 
-void AjustarProcesoHijo(int contador){
-    if (line->background == 0){
+void AjustarProcesoHijo(int contador) {
+    if (line->background == 0) {
         signal(SIGINT, SIG_DFL);
         signal(SIGQUIT, SIG_DFL);
     }
     RevisarErrorMandato(contador);
 }
 
-void EsperarHijos(int *arrayPIDs){
+void eliminarCursor(lista *jobs, nodo *cursor, nodo *ant) {
+    if (cursor == jobs->head) {
+        jobs->head = cursor->sig;
+        destruirNodo(cursor);
+    } else {
+        ant->sig = cursor->sig;
+        destruirNodo(cursor);
+    }
+}
+
+
+void ExecuteJOBS(lista *jobs) {
+    MostrarLista(jobs);
+}
+
+void EsperarHijos(int *arrayPIDs) {
     int contador;
-    for (contador = 0; contador < line->ncommands; contador++){
+    for (contador = 0; contador < line->ncommands; contador++) {
         waitpid(arrayPIDs[contador], NULL, 0);
     }
 }
 
-void Execute(void){
+void Execute(char *buffer) {
     int **arrayPipes;
     int *arrayPIDs;
     int contador;
@@ -188,52 +315,98 @@ void Execute(void){
 
     arrayPipes = CrearArrayPipes();
 
-    for (contador = 0; contador < line->ncommands; contador++){
+    for (contador = 0; contador < line->ncommands; contador++) {
         pid = fork();
         RevisarErrorFork(pid);
         arrayPIDs[contador] = pid;
-        if (pid == 0){
+        if (pid == 0) {
             AjustarProcesoHijo(contador);
             GestionarRedireccionesEntradaFichero(contador);
             GestionarRedireccionesSalidaFichero(contador);
             GestionarRedireccionesErrorFichero(contador);
             GestionarPipesIO(arrayPipes, contador);
             execvp(line->commands[contador].filename, line->commands[contador].argv);
-            exit(1);
-    	}
+            exit(0);
+        }
     }
-    if (line->ncommands > 1){
+    if (line->ncommands > 1) {
         closePipes(arrayPipes);
     }
-    if (line->background == 1){
-        for (contador = 0; contador < line->ncommands; contador++){
-            printf("[%d]\n", arrayPIDs[contador]);//todo ????
-        }
-    } else{
-        EsperarHijos(arrayPIDs);
-    }
+    EsperarHijos(arrayPIDs);
     free(arrayPIDs);
 }
 
-void manejador(int sig){
-    waitpid(WAIT_ANY, NULL, WNOHANG);
+int HijoHaTerminado(int *status) {
+    if (WIFEXITED(status) || WIFSIGNALED(status)) {
+        return 1;
+    } else {
+        return 0;
+    }
 }
 
-int main(void){
+void daemonJobsWait(lista *jobs) {
+    nodo *cursor;
+    nodo *ant;
+    int *status;
+
+    while (true) {
+        cursor = jobs->head;
+        ant = NULL;
+        while (cursor = !NULL) {
+            status = NULL;
+            waitpid(cursor->pid, &status, WNOHANG); //todo no sé si esto funciona así
+            if (HijoHaTerminado(status)) { //todo ñadir aqui todas las señales
+                eliminarCursor(jobs, cursor, ant);
+                cursor = ant->sig;
+            }
+        }
+    }
+}
+
+void manejador(int sig) {
+    waitpid(WAIT_ANY, NULL, WNOHANG);//todo esto no entrará en conflicto con el bg cuando espere cualquier señal??
+}
+
+int main(void) {
     char buffer[1024];
-    printf("msh> ");
+    pid_t pid;
+    pid_t pid_Daemon;
+    lista *jobs = InicializarLista();
+
 
     signal(SIGINT, SIG_IGN);
     signal(SIGQUIT, SIG_IGN);
     signal(SIGCHLD, manejador);
-    while (scanf("%s",buffer)){
-        line = tokenize(buffer);
-        if (strcmp(line->commands[0].argv[0], "cd") == 0){
-            ExecuteCD();
-        }else{
-            Execute();
-        }
-        printf("\nmsh> ");
+    pid_Daemon=fork();
+    if (pid_Daemon==0){
+        free(buffer);
+        signal(SIGUSR1,SIGINT);
+        signal(SIGUSR2,destruirLista(jobs));
+        daemonJobsWait(jobs);
     }
+    while (scanf("%s", buffer)) {
+        printf("msh> ");
+        line = tokenize(buffer);
+        if (strcmp(line->commands[0].argv[0], "cd") == 0) {
+            ExecuteCD();
+        } else if (strcmp(line->commands[0].argv[0], "jobs") == 0) {
+            ExecuteJOBS(jobs);
+        } else {
+            if (line->background == 0) {
+                Execute(buffer);
+            } else {
+                pid = fork();
+                if (pid == 0) {
+                    Execute(buffer);
+                } else {
+                    AnnadirNodoALaCola(jobs, buffer, pid);// La espera se produce cuando se llama al comando jobs
+                }
+            }
+        }
+    }
+    kill(pid_Daemon,SIGUSR2);
+    kill(pid_Daemon,SIGUSR1);
+    destruirLista(jobs);
+    free(buffer);
     return 0;
 }
