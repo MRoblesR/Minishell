@@ -38,19 +38,19 @@ Nodo *CrearNodo(char *valor, pid_t pid) {
     Nodo *newNodo = (Nodo *) malloc(sizeof(Nodo));
     newNodo->sig = NULL;
     newNodo->contenido = tokenize(valor);//todo dudo que sea correcto
-    newNodo->pid_t = pid;
+    newNodo->pid = pid;
     return newNodo;
 }
 
 void MostrarLinea(Nodo *pNodo) {
     //todo corregir el formato
-    int i, j;
+    int i;
     if (pNodo->contenido->redirect_input != NULL) {
         printf("%s > ", pNodo->contenido->redirect_input);
     }
     for (i = 0; i < pNodo->contenido->ncommands; i++) {
         printf("%s ", pNodo->contenido->commands[i].filename);
-        printf("%s ", pNodo->contenido->commands[i].argv);
+        printf("%p ", pNodo->contenido->commands[i].argv);
     }
     if (pNodo->contenido->redirect_output != NULL) {
         printf("1>%s  ", pNodo->contenido->redirect_output);
@@ -283,7 +283,7 @@ void AjustarProcesoHijo(int contador) {
     RevisarErrorMandato(contador);
 }
 
-void eliminarCursor(lista *jobs, nodo *cursor, nodo *ant) {
+void eliminarCursor(Lista *jobs, Nodo *cursor, Nodo *ant) {
     if (cursor == jobs->head) {
         jobs->head = cursor->sig;
         destruirNodo(cursor);
@@ -294,7 +294,7 @@ void eliminarCursor(lista *jobs, nodo *cursor, nodo *ant) {
 }
 
 
-void ExecuteJOBS(lista *jobs) {
+void ExecuteJOBS(Lista *jobs) {
     MostrarLista(jobs);
 }
 
@@ -335,25 +335,27 @@ void Execute(char *buffer) {
     EsperarHijos(arrayPIDs);
     free(arrayPIDs);
 }
-
+// falta REVISAR como va
+// da fallo y pone: invalid operands to binary & (have 'int *' and 'int')
 int HijoHaTerminado(int *status) {
-    if (WIFEXITED(status) || WIFSIGNALED(status)) {
+    if ((WIFEXITED(status)) || WIFSIGNALED(status)) {
         return 1;
     } else {
         return 0;
     }
 }
 
-void daemonJobsWait(lista *jobs) {
-    nodo *cursor;
-    nodo *ant;
+void daemonJobsWait(Lista *jobs) {
+    Nodo *cursor;
+    Nodo *ant;
     int *status;
 
-    while (true) {
+    while (1) {
         cursor = jobs->head;
         ant = NULL;
-        while (cursor = !NULL) {
+        while (cursor != NULL) {
             status = NULL;
+            // REVISAR aqui tambien da fallo pone: passing argument 2 of 'waitpaid' from incompatible pointer type
             waitpid(cursor->pid, &status, WNOHANG); //todo no sé si esto funciona así
             if (HijoHaTerminado(status)) { //todo ñadir aqui todas las señales
                 eliminarCursor(jobs, cursor, ant);
@@ -371,7 +373,7 @@ int main(void) {
     char buffer[1024];
     pid_t pid;
     pid_t pid_Daemon;
-    lista *jobs = InicializarLista();
+    Lista *jobs = InicializarLista();
 
 
     signal(SIGINT, SIG_IGN);
@@ -380,7 +382,10 @@ int main(void) {
     pid_Daemon=fork();
     if (pid_Daemon==0){
         free(buffer);
+        // aqui tambien da fallo en los 2 signal REVISAR
+        // passing argument 2 of 'signal' makes pointer from integer without a cast
         signal(SIGUSR1,SIGINT);
+        //invalid expression
         signal(SIGUSR2,destruirLista(jobs));
         daemonJobsWait(jobs);
     }
