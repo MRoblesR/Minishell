@@ -204,17 +204,18 @@ int **CrearArrayPipes() {
 
 void CerrarPipesExcepto(int **arrayPipes, int excepcion) {
     int contador;
+
     for (contador = 0; contador < line->ncommands; contador++) {
         if (contador == excepcion) {
             continue;
         } else {
             if (contador == 0) {
-                close(arrayPipes[0][0]);
+                close(arrayPipes[0][1]);
             } else if (contador == (line->ncommands - 1)) {
-                close(arrayPipes[contador - 1][1]);
+                close(arrayPipes[contador - 1][0]);
             } else {
-                close(arrayPipes[contador-1][1]);
-                close(arrayPipes[contador][0]);
+                close(arrayPipes[contador-1][0]);
+                close(arrayPipes[contador][1]);
             }
         }
     }
@@ -382,27 +383,27 @@ void Execute() {
 
         if (pid == 0) {
             if (contador == 1) {
-                printf("essto es el wc0");
+                printf("essto es el wc0\n");
             }
             AjustarSenalesBgProcesoHijo(contador);
             if (contador == 1) {
-                printf("essto es el wc1");
+                printf("essto es el wc1\n");
             }
             GestionarRedireccionesEntradaFichero(contador);
             if (contador == 1) {
-                printf("essto es el wc2");
+                printf("essto es el wc2\n");
             }
             GestionarRedireccionesSalidaFichero(contador);
             if (contador == 1) {
-                printf("essto es el wc3");
+                printf("essto es el wc3\n");
             }
             GestionarRedireccionesErrorFichero(contador);
             if (contador == 1) {
-                printf("essto es el wc4");
+                printf("essto es el wc4\n");
             }
             GestionarPipesIO(arrayPipes, contador);
             if (contador == 1) {
-                printf("essto es el wc5");
+                printf("essto es el wc5\n");
             }
             execvp(line->commands[contador].filename, line->commands[contador].argv);
             exit(0);
