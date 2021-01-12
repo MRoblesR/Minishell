@@ -3,14 +3,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <sys/types.h>
-#include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
-#include <unistd.h>
 
+
+tline *line; //todo podriamos poner esto como no global
 /*----------------------------------Estructuras de datos------------------------*/
 struct nodo {
     struct nodo *sig;
@@ -75,6 +72,8 @@ struct pila {
 };
 
 typedef struct pila Pila;
+/*Variable global jobs*/
+Pila *jobs;
 
 /*Metodos Pila*/
 
@@ -85,17 +84,17 @@ Pila *InicializarPila() {
 }
 
 
-Pila *AnnadirNodoALaPila(Pila *pPila, char *valor, pid_t pid) {
+Pila *AnnadirNodoALaPila(char *valor, pid_t pid) {
     Nodo *newNodo = CrearNodo(valor, pid);
-    newNodo->sig = pPila->head;
-    pPila->head = newNodo;
-    return pPila;
+    newNodo->sig = jobs->head;
+    jobs->head = newNodo;
+    return jobs;
 }
 
 
-void MostrarPila(Pila *pPila) {
+void MostrarPila() {
     Nodo *cursor;
-    cursor = pPila->head;
+    cursor = jobs->head;
 
     printf("  PID     MANDATO");
     while (cursor != NULL) {
@@ -104,7 +103,7 @@ void MostrarPila(Pila *pPila) {
     }
 }
 
-void EliminarCursor(Pila *jobs, Nodo *cursor, Nodo *ant) {
+void EliminarCursor(Nodo *cursor, Nodo *ant) {
     if (cursor == jobs->head) {
         jobs->head = cursor->sig;
         destruirNodo(cursor);
@@ -114,25 +113,24 @@ void EliminarCursor(Pila *jobs, Nodo *cursor, Nodo *ant) {
     }
 }
 
-void destruirPila(Pila *pPila) {
+void destruirPila() {
     Nodo *nodoBorrar;
     Nodo *nodo;
 
-    if (pPila == NULL) {
-        free(pPila);
+    if (jobs == NULL) {
+        free(jobs);
     } else {
-        nodo = pPila->head;
+        nodo = jobs->head;
         while (nodo != NULL) {
             nodoBorrar = nodo;
             nodo = getSigNodo(nodo);
             destruirNodo(nodoBorrar);
         }
-        free(pPila);
+        free(jobs);
     }
 }
 
 
-tline *line; //todo podriamos poner esto como no global
 
 /*---------------------------Errores------------------------------------------*/
 
@@ -205,7 +203,7 @@ int **CrearArrayPipes() {
 }
 
 void GestionarPipesIO(int **arrayPipes, int contador) {
-    int errorCode = 0;
+    int errorCode;
 
     if (line->ncommands > 1) {
         if (contador == 0) {
@@ -234,7 +232,7 @@ void DestruirArrayPipes(int **arrayPipes) {
 
 /*---------------------Gestión de redirecciones----------------*/
 void GestionarRedireccionesEntradaFichero(int contador) {
-    int errorCode = 0;
+    int errorCode;
     int fileDescriptor;
 
     if (contador == 0) {
@@ -250,7 +248,7 @@ void GestionarRedireccionesEntradaFichero(int contador) {
 }
 
 void GestionarRedireccionesSalidaFichero(int contador) {
-    int errorCode = 0;
+    int errorCode;
     int fileDescriptor;
 
     if (contador == line->ncommands - 1) {
@@ -266,7 +264,7 @@ void GestionarRedireccionesSalidaFichero(int contador) {
 }
 
 void GestionarRedireccionesErrorFichero(int contador) {
-    int errorCode = 0;
+    int errorCode;
     int fileDescriptor;
 
     if (contador == line->ncommands - 1) {
@@ -290,7 +288,7 @@ void EsperarHijos(int *arrayPIDs) {
     }
 }
 
-int HijoHaTerminado(int *status) {
+int HijoHaTerminado(int status) {
     if (WIFEXITED(status)) {
         return 1;
     }
@@ -311,16 +309,16 @@ void AjustarSenalesBgProcesoHijo(int contador) {
 }
 
 
-void LimpiarJobs(pila *jobs) {
-    nodo *cursor = jobs->head;
-    nodo *ant = NULL;
+void LimpiarJobs() {
+    Nodo *cursor = jobs->head;
+    Nodo *ant = NULL;
     int *status;
 
-    while (cursor = !NULL) {
+    while (cursor != NULL) {
         status = NULL;
-        waitpid(cursor->pid, &status, WNOHANG); //todo no sé si esto funciona así
-        if (HijoHaTerminado(status)) {
-            EliminarCursor(jobs, cursor, ant);
+        waitpid(cursor->pid, status, WNOHANG); //todo no sé si esto funciona así
+        if (HijoHaTerminado(*status)) {
+            EliminarCursor(cursor, ant);
             cursor = ant->sig;
         }
     }
@@ -341,12 +339,12 @@ void ExecuteCD(void) {
     RevisarErrorCd(dir, errorInt);
 }
 
-void ExecuteJOBS(Pila *jobs) {
+void ExecuteJOBS() {
     /*Jobs como comando solo muestra los comandos en bg actualmente*/
-    MostrarPila(jobs);
+    MostrarPila();
 }
 
-void Execute(char *buffer) {
+void Execute() {
     int **arrayPipes;
     int *arrayPIDs;
     int contador;
@@ -382,33 +380,33 @@ void Execute(char *buffer) {
 int main(void) {
     char buffer[1024];
     pid_t pid;
-    pila *jobs = InicializarPila();
+    jobs = InicializarPila();
 
     signal(SIGINT, SIG_IGN);
     signal(SIGQUIT, SIG_IGN);//Se ignoran las señales de teclado de terminación
-    signal(SIGCHLD, LimpiarJobs);//Cuando un hijo manda una señal de que ha terminado se ejecuta el
+    signal(SIGCHLD,LimpiarJobs);//Cuando un hijo manda una señal de que ha terminado se ejecuta el
     printf("msh> ");
     while (scanf("%s", buffer)) {
         line = tokenize(buffer);
         if (strcmp(line->commands[0].argv[0], "cd") == 0) {
             ExecuteCD();
         } else if (strcmp(line->commands[0].argv[0], "jobs") == 0) {
-            ExecuteJOBS(jobs);
+            ExecuteJOBS();
         } else {
             if (line->background == 0) {
-                Execute(buffer);
+                Execute();
             } else {
                 pid = fork();
                 if (pid == 0) {
-                    Execute(buffer);
+                    Execute();
                 } else {
-                    AnnadirNodoALaPila(jobs, buffer, pid);// La espera se produce cuando un hijo manda la señal SIGCHLD
+                    AnnadirNodoALaPila(buffer, pid);// La espera se produce cuando un hijo manda la señal SIGCHLD
                 }
             }
         }
         printf("msh> ");
     }
-    destruirPila(jobs);
+    destruirPila();
     free(buffer);
     exit(0);
 }

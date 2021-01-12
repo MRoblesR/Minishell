@@ -3,4 +3,4 @@ project(minishell C)
 
 set(CMAKE_C_STANDARD 99)
 
-add_executable(minishell minishell.c myshellV2)
+add_executable(minishell libparser.a myshellV2.c )
