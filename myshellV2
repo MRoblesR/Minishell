@@ -191,13 +191,16 @@ void ExecuteCD(void) {
 }
 
 
-void closePipes(int **arrayPipes) {
+void DestruirArrayPipes(int **arrayPipes) {
     int contador;
-    for (contador = 0; contador < line->ncommands - 1; contador++) {
-        close(arrayPipes[contador][0]);
-        close(arrayPipes[contador][1]);
+    if (line->ncommands > 1) {
+        for (contador = 0; contador < line->ncommands - 1; contador++) {
+            close(arrayPipes[contador][0]);
+            close(arrayPipes[contador][1]);
+            free(arrayPipes[contador]);
+        }
+        free(arrayPipes);
     }
-    free(arrayPipes);
 }
 
 
@@ -259,14 +262,14 @@ void GestionarPipesIO(int **arrayPipes, int contador) {
             errorCode += dup2(arrayPipes[contador - 1][0], 0);
         }
         RevisarErrorDup2(errorCode);
-        closePipes(arrayPipes);
+        DestruirArrayPipes(arrayPipes);
     }
 }
 
 void GestionarRedireccionesEntradaFichero(int contador) {
     int errorCode = 0;
     int fileDescriptor;
-    if (contador==0) {
+    if (contador == 0) {
         if (line->redirect_input != NULL) {
             fileDescriptor = open(line->redirect_input, O_RDONLY);
             RevisarErrorAperturaFichero(fileDescriptor);
@@ -333,14 +336,13 @@ void Execute(char *buffer) {
             exit(0);
         }
     }
-    if (line->ncommands > 1) {
-        closePipes(arrayPipes);
-    }
+
+    DestruirArrayPipes(arrayPipes);
     EsperarHijos(arrayPIDs);
     free(arrayPIDs);
 }
-// falta REVISAR como va
-// da fallo y pone: invalid operands to binary & (have 'int *' and 'int')
+
+
 int HijoHaTerminado(int *status) {
     if (WIFEXITED(status)) {
         return 1;
@@ -360,16 +362,11 @@ void LimpiarJobs(lista *jobs) {
     while (cursor = !NULL) {
         status = NULL;
         waitpid(cursor->pid, &status, WNOHANG); //todo no sé si esto funciona así
-        if (HijoHaTerminado(status)) { //todo ñadir aqui todas las señales
+        if (HijoHaTerminado(status)) {
             eliminarCursor(jobs, cursor, ant);
             cursor = ant->sig;
         }
     }
-}
-
-
-void manejador(int sig) {
-    waitpid(WAIT_ANY, NULL, WNOHANG);//todo esto no entrará en conflicto con el bg cuando espere cualquier señal??
 }
 
 int main(void) {
@@ -379,7 +376,7 @@ int main(void) {
 
     signal(SIGINT, SIG_IGN);
     signal(SIGQUIT, SIG_IGN);
-    signal(SIGCHLD, manejador);
+    signal(SIGCHLD, LimpiarJobs);
     printf("msh> ");
     while (scanf("%s", buffer)) {
         line = tokenize(buffer);
@@ -400,7 +397,6 @@ int main(void) {
             }
         }
         printf("msh> ");
-        LimpiarJobs(jobs);
     }
     destruirLista(jobs);
     free(buffer);
