@@ -65,6 +65,7 @@ void destruirNodo(Nodo *pNodo) {
     if (pNodo == NULL) {
         free(pNodo);
     } else {
+        kill(SIGKILL, pNodo->pid);
         free(pNodo->contenido->commands);
         free(pNodo->contenido);
         free(pNodo);
@@ -265,17 +266,19 @@ void GestionarPipesIO(int **arrayPipes, int contador) {
 void GestionarRedireccionesEntradaFichero(int contador) {
     int errorCode = 0;
     int fileDescriptor;
-    if ((contador == 0) && (line->redirect_input != NULL)) {
-        fileDescriptor = open(line->redirect_input, O_RDONLY);
-        RevisarErrorAperturaFichero(fileDescriptor);
+    if (contador==0) {
+        if (line->redirect_input != NULL) {
+            fileDescriptor = open(line->redirect_input, O_RDONLY);
+            RevisarErrorAperturaFichero(fileDescriptor);
 
-        errorCode = dup2(fileDescriptor, 0);
-        RevisarErrorDup2(errorCode);
-        close(fileDescriptor);
+            errorCode = dup2(fileDescriptor, 0);
+            RevisarErrorDup2(errorCode);
+            close(fileDescriptor);
+        }
     }
 }
 
-void AjustarProcesoHijo(int contador) {
+void AjustarSenalesBgProcesoHijo(int contador) {
     if (line->background == 0) {
         signal(SIGINT, SIG_DFL);
         signal(SIGQUIT, SIG_DFL);
@@ -319,8 +322,9 @@ void Execute(char *buffer) {
         pid = fork();
         RevisarErrorFork(pid);
         arrayPIDs[contador] = pid;
+
         if (pid == 0) {
-            AjustarProcesoHijo(contador);
+            AjustarSenalesBgProcesoHijo(contador);
             GestionarRedireccionesEntradaFichero(contador);
             GestionarRedireccionesSalidaFichero(contador);
             GestionarRedireccionesErrorFichero(contador);
@@ -337,31 +341,31 @@ void Execute(char *buffer) {
 }
 
 int HijoHaTerminado(int *status) {
-    if (WIFEXITED(status) || WIFSIGNALED(status)) {
+    if (WIFEXITED(status)) {
         return 1;
-    } else {
-        return 0;
     }
+    if (WIFSIGNALED(status)) {
+        return 1;
+    }
+    return 0;
+
 }
 
-void daemonJobsWait(lista *jobs) {
-    nodo *cursor;
-    nodo *ant;
+void LimpiarJobs(lista *jobs) {
+    nodo *cursor = jobs->head;
+    nodo *ant = NULL;
     int *status;
 
-    while (true) {
-        cursor = jobs->head;
-        ant = NULL;
-        while (cursor = !NULL) {
-            status = NULL;
-            waitpid(cursor->pid, &status, WNOHANG); //todo no sé si esto funciona así
-            if (HijoHaTerminado(status)) { //todo ñadir aqui todas las señales
-                eliminarCursor(jobs, cursor, ant);
-                cursor = ant->sig;
-            }
+    while (cursor = !NULL) {
+        status = NULL;
+        waitpid(cursor->pid, &status, WNOHANG); //todo no sé si esto funciona así
+        if (HijoHaTerminado(status)) { //todo ñadir aqui todas las señales
+            eliminarCursor(jobs, cursor, ant);
+            cursor = ant->sig;
         }
     }
 }
+
 
 void manejador(int sig) {
     waitpid(WAIT_ANY, NULL, WNOHANG);//todo esto no entrará en conflicto con el bg cuando espere cualquier señal??
@@ -370,22 +374,14 @@ void manejador(int sig) {
 int main(void) {
     char buffer[1024];
     pid_t pid;
-    pid_t pid_Daemon;
     lista *jobs = InicializarLista();
-
 
     signal(SIGINT, SIG_IGN);
     signal(SIGQUIT, SIG_IGN);
     signal(SIGCHLD, manejador);
-    pid_Daemon=fork();
-    if (pid_Daemon==0){
-        free(buffer);
-        signal(SIGUSR1,SIGINT);
-        signal(SIGUSR2,destruirLista(jobs));
-        daemonJobsWait(jobs);
-    }
+    printf("msh> ");
     while (scanf("%s", buffer)) {
-        printf("msh> ");
+
         line = tokenize(buffer);
         if (strcmp(line->commands[0].argv[0], "cd") == 0) {
             ExecuteCD();
@@ -403,10 +399,10 @@ int main(void) {
                 }
             }
         }
+        printf("msh> ");
+        LimpiarJobs(jobs);
     }
-    kill(pid_Daemon,SIGUSR2);
-    kill(pid_Daemon,SIGUSR1);
     destruirLista(jobs);
     free(buffer);
-    return 0;
+    exit(0);
 }
