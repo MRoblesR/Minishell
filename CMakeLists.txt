@@ -4,4 +4,6 @@ project(minishell C)
 set(CMAKE_C_STANDARD 99)
 
 add_executable(minishell test.c )
-target_link_libraries(minishell libparser.a)
+
+target_link_libraries(minishell LINK_PUBLIC ${libparser.a})
+

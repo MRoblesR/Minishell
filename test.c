@@ -37,7 +37,7 @@ Nodo *CrearNodo(char *valor, pid_t pid) {
 void MostrarLinea(Nodo *pNodo) {
     //todo corregir el formato
     int i;
-    printf(">>%i    ",pNodo->pid);
+    printf(">>%lli    ",pNodo->pid);
     if (pNodo->contenido->redirect_input != NULL) {
         printf("%s > ", pNodo->contenido->redirect_input);
     }
