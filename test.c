@@ -1,4 +1,4 @@
-#include "parser.h"
+#include "parser/parser.h" //todo hay que cambiar esto
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -37,7 +37,7 @@ Nodo *CrearNodo(char *valor, pid_t pid) {
 void MostrarLinea(Nodo *pNodo) {
     //todo corregir el formato
     int i;
-    printf(">>%lli    ",pNodo->pid);
+    printf(">>%i    ",pNodo->pid);
     if (pNodo->contenido->redirect_input != NULL) {
         printf("%s > ", pNodo->contenido->redirect_input);
     }
@@ -361,11 +361,29 @@ void Execute() {
 
 
         if (pid == 0) {
+            if (contador==1){
+                printf("essto es el wc0");
+            }
             AjustarSenalesBgProcesoHijo(contador);
+            if (contador==1){
+                printf("essto es el wc1");
+            }
             GestionarRedireccionesEntradaFichero(contador);
+            if (contador==1){
+                printf("essto es el wc2");
+            }
             GestionarRedireccionesSalidaFichero(contador);
+            if (contador==1){
+                printf("essto es el wc3");
+            }
             GestionarRedireccionesErrorFichero(contador);
+            if (contador==1){
+                printf("essto es el wc4");
+            }
             GestionarPipesIO(arrayPipes, contador);
+            if (contador==1){
+                printf("essto es el wc5");
+            }
             execvp(line->commands[contador].filename, line->commands[contador].argv);
             exit(0);
         }
@@ -386,12 +404,14 @@ int main(void) {
     signal(SIGQUIT, SIG_IGN);//Se ignoran las señales de teclado de terminación
     signal(SIGCHLD,LimpiarJobs);//Cuando un hijo manda una señal de que ha terminado se ejecuta el
     printf("msh> ");
-    while (scanf("%s", buffer)) {
+    while (fgets(buffer,1024,stdin)) {
         line = tokenize(buffer);
         if (strcmp(line->commands[0].argv[0], "cd") == 0) {
             ExecuteCD();
         } else if (strcmp(line->commands[0].argv[0], "jobs") == 0) {
             ExecuteJOBS();
+        } else if (strcmp(line->commands[0].argv[0], "exit") == 0) {
+            break;
         } else {
             if (line->background == 0) {
                 Execute();
