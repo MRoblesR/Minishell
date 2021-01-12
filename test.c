@@ -382,29 +382,11 @@ void Execute() {
 
 
         if (pid == 0) {
-            if (contador == 1) {
-                printf("essto es el wc0\n");
-            }
             AjustarSenalesBgProcesoHijo(contador);
-            if (contador == 1) {
-                printf("essto es el wc1\n");
-            }
             GestionarRedireccionesEntradaFichero(contador);
-            if (contador == 1) {
-                printf("essto es el wc2\n");
-            }
             GestionarRedireccionesSalidaFichero(contador);
-            if (contador == 1) {
-                printf("essto es el wc3\n");
-            }
             GestionarRedireccionesErrorFichero(contador);
-            if (contador == 1) {
-                printf("essto es el wc4\n");
-            }
             GestionarPipesIO(arrayPipes, contador);
-            if (contador == 1) {
-                printf("essto es el wc5\n");
-            }
             execvp(line->commands[contador].filename, line->commands[contador].argv);
             exit(0);
         }
