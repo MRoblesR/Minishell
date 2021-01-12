@@ -37,7 +37,7 @@ Nodo *CrearNodo(char *valor, pid_t pid) {
 void MostrarLinea(Nodo *pNodo) {
     //todo corregir el formato
     int i;
-    printf(">>%i    ",pNodo->pid);
+    printf(">>%i    ", pNodo->pid);
     if (pNodo->contenido->redirect_input != NULL) {
         printf("%s > ", pNodo->contenido->redirect_input);
     }
@@ -131,7 +131,6 @@ void destruirPila() {
 }
 
 
-
 /*---------------------------Errores------------------------------------------*/
 
 
@@ -202,6 +201,25 @@ int **CrearArrayPipes() {
     }
 }
 
+
+void CerrarPipesExcepto(int **arrayPipes, int excepcion) {
+    int contador;
+    for (contador = 0; contador < line->ncommands; contador++) {
+        if (contador == excepcion) {
+            continue;
+        } else {
+            if (contador == 0) {
+                close(arrayPipes[0][0]);
+            } else if (contador == (line->ncommands - 1)) {
+                close(arrayPipes[contador - 1][1]);
+            } else {
+                close(arrayPipes[contador-1][1]);
+                close(arrayPipes[contador][0]);
+            }
+        }
+    }
+}
+
 void GestionarPipesIO(int **arrayPipes, int contador) {
     int errorCode;
 
@@ -215,8 +233,10 @@ void GestionarPipesIO(int **arrayPipes, int contador) {
             errorCode += dup2(arrayPipes[contador - 1][0], 0);
         }
         RevisarErrorDup2(errorCode);
+        CerrarPipesExcepto(arrayPipes,contador);
     }
 }
+
 
 void DestruirArrayPipes(int **arrayPipes) {
     int contador;
@@ -361,27 +381,27 @@ void Execute() {
 
 
         if (pid == 0) {
-            if (contador==1){
+            if (contador == 1) {
                 printf("essto es el wc0");
             }
             AjustarSenalesBgProcesoHijo(contador);
-            if (contador==1){
+            if (contador == 1) {
                 printf("essto es el wc1");
             }
             GestionarRedireccionesEntradaFichero(contador);
-            if (contador==1){
+            if (contador == 1) {
                 printf("essto es el wc2");
             }
             GestionarRedireccionesSalidaFichero(contador);
-            if (contador==1){
+            if (contador == 1) {
                 printf("essto es el wc3");
             }
             GestionarRedireccionesErrorFichero(contador);
-            if (contador==1){
+            if (contador == 1) {
                 printf("essto es el wc4");
             }
             GestionarPipesIO(arrayPipes, contador);
-            if (contador==1){
+            if (contador == 1) {
                 printf("essto es el wc5");
             }
             execvp(line->commands[contador].filename, line->commands[contador].argv);
@@ -402,9 +422,9 @@ int main(void) {
 
     signal(SIGINT, SIG_IGN);
     signal(SIGQUIT, SIG_IGN);//Se ignoran las señales de teclado de terminación
-    signal(SIGCHLD,LimpiarJobs);//Cuando un hijo manda una señal de que ha terminado se ejecuta el
+    signal(SIGCHLD, LimpiarJobs);//Cuando un hijo manda una señal de que ha terminado se ejecuta el
     printf("msh> ");
-    while (fgets(buffer,1024,stdin)) {
+    while (fgets(buffer, 1024, stdin)) {
         line = tokenize(buffer);
         if (strcmp(line->commands[0].argv[0], "cd") == 0) {
             ExecuteCD();
