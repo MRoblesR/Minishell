@@ -1,4 +1,4 @@
-#include "parser/parser.h" //todo hay que cambiar esto
+#include "parser.h" //todo hay que cambiar esto
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -328,8 +328,8 @@ int HijoHaTerminado(int status) {
 }
 
 void CambiarSenalesForeground() {
-    signal(SIGINT, SIGKILL);
-    signal(SIGQUIT, SIGKILL);
+    signal(SIGINT,SIG_DFL);
+    signal(SIGQUIT,SIG_DFL);
 }
 
 void CambiarSenalesBackground() {
@@ -389,9 +389,9 @@ void ExecuteFG() {
     if (line->commands[0].argv[1] == NULL) {
         pid = jobs->head->pid; //Si no se introduce el pid deseado se pasa el ultimo añadido
     } else {
-        pid = line->commands[0].argv[1];
+        pid = atoi(line->commands[0].argv[1]);
     }
-    waitpid(pid, NULL, NULL);
+    waitpid(pid, NULL, 0);
     EliminarProcesoCabeza();
 }
 
