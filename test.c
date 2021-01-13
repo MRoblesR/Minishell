@@ -96,7 +96,7 @@ void MostrarPila() {
     Nodo *cursor;
     cursor = jobs->head;
 
-    printf("  PID     MANDATO");
+    printf("  PID     MANDATO\n");
     while (cursor != NULL) {
         MostrarLinea(cursor);
         cursor = getSigNodo(cursor);
