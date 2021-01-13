@@ -98,27 +98,38 @@ void MostrarPila() {
     Nodo *cursor;
     cursor = jobs->head;
 
-    printf("  PID     MANDATO");
+    printf("  PID     MANDATO\n");
     while (cursor != NULL) {
         MostrarLinea(cursor);
         cursor = getSigNodo(cursor);
     }
 }
 
+void EliminarProcesoCabeza() {
+    Nodo *cursor = jobs->head;
+    jobs->head = jobs->head->sig;
+    destruirNodo(cursor);
+}
+
 void EliminarCursor(Nodo *cursor, Nodo *ant) {
     if (cursor == jobs->head) {
-
+        EliminarProcesoCabeza();
     } else {
         ant->sig = cursor->sig;
         destruirNodo(cursor);
     }
 }
-
-void EliminarProcesoCabeza() {
-    Nodo * cursor=jobs->head;
-    jobs->head = jobs->head->sig;
-    destruirNodo(cursor);
+void EliminarPID(pid_t pid){
+    Nodo * cursor= jobs->head;
+    Nodo * ant=NULL;
+    while (cursor->pid!=pid){
+        ant=cursor;
+        cursor=cursor->sig;
+    }
+    EliminarCursor(cursor,ant);
 }
+
+
 
 void destruirPila() {
     Nodo *nodoBorrar;
@@ -328,8 +339,8 @@ int HijoHaTerminado(int status) {
 }
 
 void CambiarSenalesForeground() {
-    signal(SIGINT,SIG_DFL);
-    signal(SIGQUIT,SIG_DFL);
+    signal(SIGINT, SIG_DFL);
+    signal(SIGQUIT, SIG_DFL);
 }
 
 void CambiarSenalesBackground() {
@@ -392,7 +403,7 @@ void ExecuteFG() {
         pid = atoi(line->commands[0].argv[1]);
     }
     waitpid(pid, NULL, 0);
-    EliminarProcesoCabeza();
+    EliminarPID(pid);
 }
 
 void Execute() {
