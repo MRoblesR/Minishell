@@ -5,6 +5,7 @@
 #include <string.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <signal.h>
 
 
 tline *line; //todo podriamos poner esto como no global
@@ -37,7 +38,7 @@ Nodo *CrearNodo(char *valor, pid_t pid) {
 void MostrarLinea(Nodo *pNodo) {
     //todo corregir el formato
     int i;
-    printf(">>%i    ", pNodo->pid);
+    printf(">>[%i]    ", pNodo->pid);
     if (pNodo->contenido->redirect_input != NULL) {
         printf("%s > ", pNodo->contenido->redirect_input);
     }
@@ -70,6 +71,7 @@ void destruirNodo(Nodo *pNodo) {
 struct pila {
     struct nodo *head;
 };
+
 
 typedef struct pila Pila;
 /*Variable global jobs*/
@@ -105,12 +107,17 @@ void MostrarPila() {
 
 void EliminarCursor(Nodo *cursor, Nodo *ant) {
     if (cursor == jobs->head) {
-        jobs->head = cursor->sig;
-        destruirNodo(cursor);
+
     } else {
         ant->sig = cursor->sig;
         destruirNodo(cursor);
     }
+}
+
+void EliminarProcesoCabeza() {
+    Nodo * cursor=jobs->head;
+    jobs->head = jobs->head->sig;
+    destruirNodo(cursor);
 }
 
 void destruirPila() {
@@ -214,7 +221,7 @@ void CerrarPipesExcepto(int **arrayPipes, int excepcion) {
             } else if (contador == (line->ncommands - 1)) {
                 close(arrayPipes[contador - 1][0]);
             } else {
-                close(arrayPipes[contador-1][0]);
+                close(arrayPipes[contador - 1][0]);
                 close(arrayPipes[contador][1]);
             }
         }
@@ -234,7 +241,7 @@ void GestionarPipesIO(int **arrayPipes, int contador) {
             errorCode += dup2(arrayPipes[contador - 1][0], 0);
         }
         RevisarErrorDup2(errorCode);
-        CerrarPipesExcepto(arrayPipes,contador);
+        CerrarPipesExcepto(arrayPipes, contador);
     }
 }
 
@@ -320,23 +327,24 @@ int HijoHaTerminado(int status) {
 
 }
 
-
-void AjustarSenalesBgProcesoHijo(int contador) {
-    if (line->background == 0) {
-        signal(SIGINT, SIG_DFL);
-        signal(SIGQUIT, SIG_DFL);
-    }
-    RevisarErrorMandato(contador);
+void CambiarSenalesForeground() {
+    signal(SIGINT, SIGKILL);
+    signal(SIGQUIT, SIGKILL);
 }
 
-
-void AjustarSenalesFgProceso(int contador) {
-    if (line->background == 0) {
-        signal(SIGINT, ManejadorFg);
-        signal(SIGQUIT, ManejadorFg);
-    }
-    RevisarErrorMandato(contador);
+void CambiarSenalesBackground() {
+    signal(SIGINT, SIG_DFL);
+    signal(SIGQUIT, SIG_DFL);
 }
+
+void AjustarSenalesProcesoHijo() {
+    if (line->background == 0) {
+        CambiarSenalesBackground();
+    } else if (line->background == 1) {
+        CambiarSenalesForeground();
+    }
+}
+
 
 void LimpiarJobs() {
     Nodo *cursor = jobs->head;
@@ -372,15 +380,21 @@ void ExecuteJOBS() {
     /*Jobs como comando solo muestra los comandos en bg actualmente*/
     MostrarPila();
 }
-void ExecuteFG(){
-    pid_t pid;
-    if (line->commands[0].argv[1] == NULL) {
-        pid=jobs->head->pid; //Si no se introduce el pid deseado se pasa el ultimo añadido
-    }else{
-        pid=line->commands[0].argv[1];
-    }
 
+
+void ExecuteFG() {
+    pid_t pid;
+    signal(SIGINT, EliminarProcesoCabeza);
+    signal(SIGQUIT, EliminarProcesoCabeza);
+    if (line->commands[0].argv[1] == NULL) {
+        pid = jobs->head->pid; //Si no se introduce el pid deseado se pasa el ultimo añadido
+    } else {
+        pid = line->commands[0].argv[1];
+    }
+    waitpid(pid, NULL, NULL);
+    EliminarProcesoCabeza();
 }
+
 void Execute() {
     int **arrayPipes;
     int *arrayPIDs;
@@ -397,7 +411,8 @@ void Execute() {
         arrayPIDs[contador] = pid;
 
         if (pid == 0) {
-            AjustarSenalesBgProcesoHijo(contador);
+            RevisarErrorMandato(contador);
+            AjustarSenalesProcesoHijo();
             GestionarRedireccionesEntradaFichero(contador);
             GestionarRedireccionesSalidaFichero(contador);
             GestionarRedireccionesErrorFichero(contador);
@@ -430,6 +445,8 @@ int main(void) {
             ExecuteJOBS();
         } else if (strcmp(line->commands[0].argv[0], "exit") == 0) {
             break;
+        } else if (strcmp(line->commands[0].argv[0], "fg") == 0) {
+            ExecuteFG();
         } else {
             if (line->background == 0) {
                 Execute();
