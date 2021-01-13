@@ -330,6 +330,14 @@ void AjustarSenalesBgProcesoHijo(int contador) {
 }
 
 
+void AjustarSenalesFgProceso(int contador) {
+    if (line->background == 0) {
+        signal(SIGINT, ManejadorFg);
+        signal(SIGQUIT, ManejadorFg);
+    }
+    RevisarErrorMandato(contador);
+}
+
 void LimpiarJobs() {
     Nodo *cursor = jobs->head;
     Nodo *ant = NULL;
@@ -364,7 +372,15 @@ void ExecuteJOBS() {
     /*Jobs como comando solo muestra los comandos en bg actualmente*/
     MostrarPila();
 }
+void ExecuteFG(){
+    pid_t pid;
+    if (line->commands[0].argv[1] == NULL) {
+        pid=jobs->head->pid; //Si no se introduce el pid deseado se pasa el ultimo añadido
+    }else{
+        pid=line->commands[0].argv[1];
+    }
 
+}
 void Execute() {
     int **arrayPipes;
     int *arrayPIDs;
@@ -380,31 +396,12 @@ void Execute() {
         RevisarErrorFork(pid);
         arrayPIDs[contador] = pid;
 
-
         if (pid == 0) {
-            if (contador == 1) {
-                printf("essto es el wc0\n");
-            }
             AjustarSenalesBgProcesoHijo(contador);
-            if (contador == 1) {
-                printf("essto es el wc1\n");
-            }
             GestionarRedireccionesEntradaFichero(contador);
-            if (contador == 1) {
-                printf("essto es el wc2\n");
-            }
             GestionarRedireccionesSalidaFichero(contador);
-            if (contador == 1) {
-                printf("essto es el wc3\n");
-            }
             GestionarRedireccionesErrorFichero(contador);
-            if (contador == 1) {
-                printf("essto es el wc4\n");
-            }
             GestionarPipesIO(arrayPipes, contador);
-            if (contador == 1) {
-                printf("essto es el wc5\n");
-            }
             execvp(line->commands[contador].filename, line->commands[contador].argv);
             exit(0);
         }
