@@ -13,6 +13,7 @@ tline *line; //todo podriamos poner esto como no global
 struct nodo {
     struct nodo *sig;
     tline *contenido;
+    char *linea;
     pid_t pid;
 };
 
@@ -31,27 +32,14 @@ Nodo *CrearNodo(char *valor, pid_t pid) {
     newNodo->contenido = tokenize(valor);
     /*Se crea el token para que cuando se introduzca un nuevo comando
      * este no sea sustituido en todos los nodos*/
+    newNodo->linea=valor;
     newNodo->pid = pid;
     return newNodo;
 }
 
 void MostrarLinea(Nodo *pNodo) {
-    //todo corregir el formato
-    int i;
     printf(">>[%i]    ", pNodo->pid);
-    if (pNodo->contenido->redirect_input != NULL) {
-        printf("%s > ", pNodo->contenido->redirect_input);
-    }
-    for (i = 0; i < pNodo->contenido->ncommands; i++) {
-        printf("%s ", pNodo->contenido->commands[i].filename);
-        printf("%p ", pNodo->contenido->commands[i].argv);
-    }
-    if (pNodo->contenido->redirect_output != NULL) {
-        printf("1>%s  ", pNodo->contenido->redirect_output);
-    }
-    if (pNodo->contenido->redirect_error != NULL) {
-        printf("2> %s ", pNodo->contenido->redirect_error);
-    }
+    printf("%s",pNodo->linea);
     printf("\n");
 }
 
