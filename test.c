@@ -47,7 +47,6 @@ void destruirNodo(Nodo *pNodo) {
         free(pNodo);
     } else {
         kill(SIGKILL, pNodo->pid);
-        free(pNodo->contenido->commands);//Se elimina el array
         free(pNodo->linea);
         free(pNodo);
     }
@@ -347,19 +346,21 @@ void AjustarSenalesProcesoHijo() {
 void LimpiarJobs() {
     Nodo *cursor = jobs->head;
     Nodo *ant = NULL;
-    int *status;
+    int status;
 
     while (cursor != NULL) {
-        status = NULL;
-        waitpid(cursor->pid, status, WNOHANG); //todo no sé si esto funciona así
-        if (status == NULL) {
-            continue;
-        } else if (HijoHaTerminado(*status)) {
+        waitpid(cursor->pid, &status, WNOHANG); //todo no sé si esto funciona así
+        if (HijoHaTerminado(status)) {
             EliminarCursor(cursor, ant);
-            cursor = ant->sig;
+            if (ant != NULL) {
+                cursor = ant->sig;
+            }else{
+                cursor=jobs->head;
+            }
         }
     }
 }
+
 
 /*---------------------Gestión de comandos----------------*/
 void ExecuteCD(void) {
@@ -439,7 +440,7 @@ int main(void) {
     signal(SIGINT, SIG_IGN);
     signal(SIGQUIT, SIG_IGN);//Se ignoran las señales de teclado de terminación
     signal(SIGCHLD, LimpiarJobs);//Cuando un hijo manda una señal de que ha terminado se ejecuta el
-    printf("msh> ");
+    printf("msh1> ");
     while (fgets(buffer, 1024, stdin)) {
         line = tokenize(buffer);
         if (strcmp(line->commands[0].argv[0], "cd") == 0) {
@@ -457,6 +458,7 @@ int main(void) {
                 pid = fork();
                 if (pid == 0) {
                     Execute();
+                    exit(0);
                 } else {
                     AnnadirNodoALaPila(buffer, pid);// La espera se produce cuando un hijo manda la señal SIGCHLD
                 }
