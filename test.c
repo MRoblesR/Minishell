@@ -1,17 +1,19 @@
-#include "parser/parser.h" //todo hay que cambiar esto
+#include "parser.h" //todo hay que cambiar esto
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/wait.h>
 #include <unistd.h>
-
+#include <signal.h>
+#include <strdup>
 
 tline *line; //todo podriamos poner esto como no global
 /*----------------------------------Estructuras de datos------------------------*/
 struct nodo {
     struct nodo *sig;
     tline *contenido;
+    char *linea;
     pid_t pid;
 };
 
@@ -30,27 +32,14 @@ Nodo *CrearNodo(char *valor, pid_t pid) {
     newNodo->contenido = tokenize(valor);
     /*Se crea el token para que cuando se introduzca un nuevo comando
      * este no sea sustituido en todos los nodos*/
+    newNodo->linea=strdup(valor);
     newNodo->pid = pid;
     return newNodo;
 }
 
 void MostrarLinea(Nodo *pNodo) {
-    //todo corregir el formato
-    int i;
-    printf(">>%i    ", pNodo->pid);
-    if (pNodo->contenido->redirect_input != NULL) {
-        printf("%s > ", pNodo->contenido->redirect_input);
-    }
-    for (i = 0; i < pNodo->contenido->ncommands; i++) {
-        printf("%s ", pNodo->contenido->commands[i].filename);
-        printf("%p ", pNodo->contenido->commands[i].argv);
-    }
-    if (pNodo->contenido->redirect_output != NULL) {
-        printf("1>%s  ", pNodo->contenido->redirect_output);
-    }
-    if (pNodo->contenido->redirect_error != NULL) {
-        printf("2> %s ", pNodo->contenido->redirect_error);
-    }
+    printf(">>[%i]    ", pNodo->pid);
+    printf("%s",pNodo->linea);
     printf("\n");
 }
 
@@ -61,6 +50,7 @@ void destruirNodo(Nodo *pNodo) {
         kill(SIGKILL, pNodo->pid);
         free(pNodo->contenido->commands);//Se elimina el array
         free(pNodo->contenido);//Se elimina el struct line
+        free(pNodo->linea);
         free(pNodo);
     }
 }
@@ -70,6 +60,7 @@ void destruirNodo(Nodo *pNodo) {
 struct pila {
     struct nodo *head;
 };
+
 
 typedef struct pila Pila;
 /*Variable global jobs*/
@@ -96,22 +87,38 @@ void MostrarPila() {
     Nodo *cursor;
     cursor = jobs->head;
 
-    printf("  PID     MANDATO");
+    printf("  PID     MANDATO\n");
     while (cursor != NULL) {
         MostrarLinea(cursor);
         cursor = getSigNodo(cursor);
     }
 }
 
+void EliminarProcesoCabeza() {
+    Nodo *cursor = jobs->head;
+    jobs->head = jobs->head->sig;
+    destruirNodo(cursor);
+}
+
 void EliminarCursor(Nodo *cursor, Nodo *ant) {
     if (cursor == jobs->head) {
-        jobs->head = cursor->sig;
-        destruirNodo(cursor);
+        EliminarProcesoCabeza();
     } else {
         ant->sig = cursor->sig;
         destruirNodo(cursor);
     }
 }
+void EliminarPID(pid_t pid){
+    Nodo * cursor= jobs->head;
+    Nodo * ant=NULL;
+    while (cursor->pid!=pid){
+        ant=cursor;
+        cursor=cursor->sig;
+    }
+    EliminarCursor(cursor,ant);
+}
+
+
 
 void destruirPila() {
     Nodo *nodoBorrar;
@@ -214,7 +221,7 @@ void CerrarPipesExcepto(int **arrayPipes, int excepcion) {
             } else if (contador == (line->ncommands - 1)) {
                 close(arrayPipes[contador - 1][0]);
             } else {
-                close(arrayPipes[contador-1][0]);
+                close(arrayPipes[contador - 1][0]);
                 close(arrayPipes[contador][1]);
             }
         }
@@ -234,7 +241,7 @@ void GestionarPipesIO(int **arrayPipes, int contador) {
             errorCode += dup2(arrayPipes[contador - 1][0], 0);
         }
         RevisarErrorDup2(errorCode);
-        CerrarPipesExcepto(arrayPipes,contador);
+        CerrarPipesExcepto(arrayPipes, contador);
     }
 }
 
@@ -320,13 +327,22 @@ int HijoHaTerminado(int status) {
 
 }
 
+void CambiarSenalesForeground() {
+    signal(SIGINT, SIG_DFL);
+    signal(SIGQUIT, SIG_DFL);
+}
 
-void AjustarSenalesBgProcesoHijo(int contador) {
+void CambiarSenalesBackground() {
+    signal(SIGINT, SIG_IGN);
+    signal(SIGQUIT, SIG_IGN);
+}
+
+void AjustarSenalesProcesoHijo() {
     if (line->background == 0) {
-        signal(SIGINT, SIG_DFL);
-        signal(SIGQUIT, SIG_DFL);
+        CambiarSenalesBackground();
+    } else if (line->background == 1) {
+        CambiarSenalesForeground();
     }
-    RevisarErrorMandato(contador);
 }
 
 
@@ -365,6 +381,19 @@ void ExecuteJOBS() {
     MostrarPila();
 }
 
+
+void ExecuteFG() {
+    pid_t pid;
+    CambiarSenalesForeground();
+    if (line->commands[0].argv[1] == NULL) {
+        pid = jobs->head->pid; //Si no se introduce el pid deseado se pasa el ultimo añadido
+    } else {
+        pid = atoi(line->commands[0].argv[1]);
+    }
+    waitpid(pid, NULL, 0);
+    EliminarPID(pid);
+}
+
 void Execute() {
     int **arrayPipes;
     int *arrayPIDs;
@@ -380,9 +409,9 @@ void Execute() {
         RevisarErrorFork(pid);
         arrayPIDs[contador] = pid;
 
-
         if (pid == 0) {
-            AjustarSenalesBgProcesoHijo(contador);
+            RevisarErrorMandato(contador);
+            AjustarSenalesProcesoHijo();
             GestionarRedireccionesEntradaFichero(contador);
             GestionarRedireccionesSalidaFichero(contador);
             GestionarRedireccionesErrorFichero(contador);
@@ -415,6 +444,8 @@ int main(void) {
             ExecuteJOBS();
         } else if (strcmp(line->commands[0].argv[0], "exit") == 0) {
             break;
+        } else if (strcmp(line->commands[0].argv[0], "fg") == 0) {
+            ExecuteFG();
         } else {
             if (line->background == 0) {
                 Execute();
