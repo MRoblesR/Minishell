@@ -1,4 +1,4 @@
-#include "parser.h" //todo hay que cambiar esto
+#include "parser/parser.h" //todo hay que cambiar esto
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -6,7 +6,6 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <signal.h>
-#include <strdup>
 
 tline *line; //todo podriamos poner esto como no global
 /*----------------------------------Estructuras de datos------------------------*/
@@ -32,14 +31,14 @@ Nodo *CrearNodo(char *valor, pid_t pid) {
     newNodo->contenido = tokenize(valor);
     /*Se crea el token para que cuando se introduzca un nuevo comando
      * este no sea sustituido en todos los nodos*/
-    newNodo->linea=strdup(valor);
+    newNodo->linea = strdup(valor);
     newNodo->pid = pid;
     return newNodo;
 }
 
 void MostrarLinea(Nodo *pNodo) {
     printf(">>[%i]    ", pNodo->pid);
-    printf("%s",pNodo->linea);
+    printf("%s", pNodo->linea);
     printf("\n");
 }
 
@@ -49,7 +48,6 @@ void destruirNodo(Nodo *pNodo) {
     } else {
         kill(SIGKILL, pNodo->pid);
         free(pNodo->contenido->commands);//Se elimina el array
-        free(pNodo->contenido);//Se elimina el struct line
         free(pNodo->linea);
         free(pNodo);
     }
@@ -108,16 +106,16 @@ void EliminarCursor(Nodo *cursor, Nodo *ant) {
         destruirNodo(cursor);
     }
 }
-void EliminarPID(pid_t pid){
-    Nodo * cursor= jobs->head;
-    Nodo * ant=NULL;
-    while (cursor->pid!=pid){
-        ant=cursor;
-        cursor=cursor->sig;
-    }
-    EliminarCursor(cursor,ant);
-}
 
+void EliminarPID(pid_t pid) {
+    Nodo *cursor = jobs->head;
+    Nodo *ant = NULL;
+    while (cursor->pid != pid) {
+        ant = cursor;
+        cursor = cursor->sig;
+    }
+    EliminarCursor(cursor, ant);
+}
 
 
 void destruirPila() {
@@ -354,7 +352,9 @@ void LimpiarJobs() {
     while (cursor != NULL) {
         status = NULL;
         waitpid(cursor->pid, status, WNOHANG); //todo no sé si esto funciona así
-        if (HijoHaTerminado(*status)) {
+        if (status == NULL) {
+            continue;
+        } else if (HijoHaTerminado(*status)) {
             EliminarCursor(cursor, ant);
             cursor = ant->sig;
         }
@@ -385,13 +385,17 @@ void ExecuteJOBS() {
 void ExecuteFG() {
     pid_t pid;
     CambiarSenalesForeground();
-    if (line->commands[0].argv[1] == NULL) {
-        pid = jobs->head->pid; //Si no se introduce el pid deseado se pasa el ultimo añadido
+    if (jobs->head == NULL) {
+        printf("No hay comandos en bg\n");
     } else {
-        pid = atoi(line->commands[0].argv[1]);
+        if (line->commands[0].argv[1] == NULL) {
+            pid = jobs->head->pid; //Si no se introduce el pid deseado se pasa el ultimo añadido
+        } else {
+            pid = atoi(line->commands[0].argv[1]);
+        }
+        waitpid(pid, NULL, 0);
+        EliminarPID(pid);
     }
-    waitpid(pid, NULL, 0);
-    EliminarPID(pid);
 }
 
 void Execute() {
