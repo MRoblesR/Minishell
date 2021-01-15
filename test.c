@@ -446,8 +446,8 @@ void Execute() {
         }
     }
     // se esperará a que los hijos acaben y luego se eliminaran los arrays de pipes y pids creados al principio
-    EsperarHijos(arrayPIDs);
     DestruirArrayPipes(arrayPipes);
+    EsperarHijos(arrayPIDs);
     free(arrayPIDs);
 }
 
