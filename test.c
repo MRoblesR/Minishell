@@ -1,4 +1,4 @@
-#include "parser/parser.h" //todo hay que cambiar esto
+#include "parser.h"
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -7,8 +7,10 @@
 #include <unistd.h>
 #include <signal.h>
 
-tline *line; //todo podriamos poner esto como no global
+tline *line; 
 /*----------------------------------Estructuras de datos------------------------*/
+
+/*---------------------Nodo--------------------*/
 struct nodo {
     struct nodo *sig;
     tline *contenido;
@@ -23,7 +25,6 @@ typedef struct nodo Nodo;
 Nodo *getSigNodo(Nodo *pNodo) {
     return pNodo->sig;
 }
-
 
 Nodo *CrearNodo(char *valor, pid_t pid) {
     Nodo *newNodo = (Nodo *) malloc(sizeof(Nodo));
@@ -52,12 +53,10 @@ void destruirNodo(Nodo *pNodo) {
     }
 }
 
-
 /*---------------------Pila--------------------*/
 struct pila {
     struct nodo *head;
 };
-
 
 typedef struct pila Pila;
 /*Variable global jobs*/
@@ -70,7 +69,6 @@ Pila *InicializarPila() {
     newList->head = NULL;
     return newList;
 }
-
 
 Pila *AnnadirNodoALaPila(char *valor, pid_t pid) {
     Nodo *newNodo = CrearNodo(valor, pid);
@@ -134,9 +132,7 @@ void destruirPila() {
     }
 }
 
-
 /*---------------------------Errores------------------------------------------*/
-
 
 void RevisarErrorFork(int pid) {
     if (pid < 0) {
@@ -154,21 +150,21 @@ void RevisarErrorMandato(int contador) {
 
 void RevisarErrorAperturaFichero(int fileDescriptor) {
     if (fileDescriptor < 0) {
-        fprintf(stderr, "error al abrir el fichero %s\n", line->redirect_input);
+        fprintf(stderr, "%s: Error. No se puede abrir el fichero\n", line->redirect_input);
         exit(3);
     }
 }
 
 void RevisarErrorCreacionFicheroStdout(int fileDescriptor) {
     if (fileDescriptor < 0) {
-        fprintf(stderr, "error al crear el fichero %s\n", line->redirect_output);
+        fprintf(stderr, "%s: Error. No se puede crear el fichero\n", line->redirect_output);
         exit(4);
     }
 }
 
 void RevisarErrorCreacionFicheroStderr(int fileDescriptor) {
     if (fileDescriptor < 0) {
-        fprintf(stderr, "error al crear el fichero%s\n", line->redirect_error);
+        fprintf(stderr, "%s: Error. No se puede crear el fichero\n", line->redirect_error);
         exit(5);
     }
 }
@@ -180,20 +176,18 @@ void RevisarErrorDup2(int errorCode) {
     }
 }
 
-
 void RevisarErrorCd(char *dir, int errorInt) {
     if (errorInt < 0) {
         fprintf(stderr, "Error, no se pudo cambiar al directorio: %s\n", dir);
     }
 }
 
-
 /*---------------------Gestión de pipes----------------*/
 int **CrearArrayPipes() {
     int **arrayPipes;
     int contador;
 
-    if (line->ncommands == 1) {//todo revisar esto
+    if (line->ncommands == 1) {
         return NULL;//Si solo hay un comando no hace falta crear pipes
     } else {
         arrayPipes = (int **) malloc(sizeof(int *) * line->ncommands - 1);
@@ -204,7 +198,6 @@ int **CrearArrayPipes() {
         return arrayPipes;
     }
 }
-
 
 void CerrarPipesExcepto(int **arrayPipes, int excepcion) {
     int contador;
@@ -242,7 +235,6 @@ void GestionarPipesIO(int **arrayPipes, int contador) {
     }
 }
 
-
 void DestruirArrayPipes(int **arrayPipes) {
     int contador;
     if (line->ncommands > 1) {/*En el caso de que solo haya un argumento el array de pipes será NULL*/
@@ -262,7 +254,7 @@ void GestionarRedireccionesEntradaFichero(int contador) {
 
     if (contador == 0) {
         if (line->redirect_input != NULL) {
-            fileDescriptor = open(line->redirect_input, O_RDONLY);// todo lo mismo que creat
+            fileDescriptor = open(line->redirect_input, O_RDONLY);
             RevisarErrorAperturaFichero(fileDescriptor);
 
             errorCode = dup2(fileDescriptor, 0);
@@ -278,7 +270,7 @@ void GestionarRedireccionesSalidaFichero(int contador) {
 
     if (contador == line->ncommands - 1) {
         if (line->redirect_output != NULL) {
-            fileDescriptor = creat(line->redirect_output, 0644);//todo replantear lo del creat
+            fileDescriptor = creat(line->redirect_output, 0644);
             RevisarErrorCreacionFicheroStdout(fileDescriptor);
 
             errorCode = dup2(fileDescriptor, 1);
@@ -303,7 +295,6 @@ void GestionarRedireccionesErrorFichero(int contador) {
         }
     }
 }
-
 
 /*---------------------Gestión de hijos----------------*/
 void EsperarHijos(int *arrayPIDs) {
@@ -342,7 +333,6 @@ void AjustarSenalesProcesoHijo() {
     }
 }
 
-
 void LimpiarJobs() {
     Nodo *cursor = jobs->head;
     Nodo *ant = NULL;
@@ -360,7 +350,6 @@ void LimpiarJobs() {
         }
     }
 }
-
 
 /*---------------------Gestión de comandos----------------*/
 void ExecuteCD(void) {
@@ -381,7 +370,6 @@ void ExecuteJOBS() {
     /*Jobs como comando solo muestra los comandos en bg actualmente*/
     MostrarPila();
 }
-
 
 void ExecuteFG() {
     pid_t pid;
@@ -430,7 +418,6 @@ void Execute() {
     free(arrayPIDs);
 }
 
-
 /*---------------------Rutina principal----------------*/
 int main(void) {
     char buffer[1024];
@@ -439,7 +426,7 @@ int main(void) {
 
     signal(SIGINT, SIG_IGN);
     signal(SIGQUIT, SIG_IGN);//Se ignoran las señales de teclado de terminación
-    signal(SIGCHLD, LimpiarJobs);//Cuando un hijo manda una señal de que ha terminado se ejecuta el
+    signal(SIGCHLD, LimpiarJobs);//Cuando un hijo manda una señal de que ha terminado se ejecuta
     printf("msh1> ");
     while (fgets(buffer, 1024, stdin)) {
         line = tokenize(buffer);
