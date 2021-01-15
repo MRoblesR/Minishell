@@ -7,7 +7,7 @@
 #include <unistd.h>
 #include <signal.h>
 
-tline *line; 
+tline *line;
 /*----------------------------------Estructuras de datos------------------------*/
 
 /*---------------------Nodo--------------------*/
@@ -200,18 +200,23 @@ int **CrearArrayPipes() {
     }
 }
 
+//Se cierran todos los pipes menos los relacionados con la posicion indicada
 void CerrarPipesExcepto(int **arrayPipes, int excepcion) {
     int contador;
 
     for (contador = 0; contador < line->ncommands; contador++) {
         if (contador == excepcion) {
+            //Si estamos en la posicion indicada no se cierran los pipes
             continue;
         } else {
             if (contador == 0) {
+                //Si el contador es 0 solo se cierra el de escritura del inicial
                 close(arrayPipes[0][1]);
             } else if (contador == (line->ncommands - 1)) {
+                //Si estamos en el ultimo pipe entonces solo se cierra el de lectura
                 close(arrayPipes[contador - 1][0]);
             } else {
+                //Si estamos en cualquier otro pipe se cierra el de lectura del anterior  y el de escritura del actual
                 close(arrayPipes[contador - 1][0]);
                 close(arrayPipes[contador][1]);
             }
@@ -224,13 +229,18 @@ void GestionarPipesIO(int **arrayPipes, int contador) {
 
     if (line->ncommands > 1) {
         if (contador == 0) {
+            //Si el contador es 0 solo se sobreescribe el stdout con el pipe de escritura del nodo
             errorCode = dup2(arrayPipes[0][1], 1);
         } else if (contador == (line->ncommands - 1)) {
+            //Si estamos en el ultimo nodo solo se sobreescribe el stdin con el pipe de lectura del nodo
             errorCode = dup2(arrayPipes[contador - 1][0], 0);
         } else {
+            //En cualquier otro caso se sobreescribe el stdin con el pipe de lectura anterior y el stdout con el
+            //pipe de escritura del actual
             errorCode = dup2(arrayPipes[contador][1], 1);
             errorCode += dup2(arrayPipes[contador - 1][0], 0);
         }
+        //Una vez redirigido se comprueba si hubo algun error y se cierran todos los pipes restantes
         RevisarErrorDup2(errorCode);
         CerrarPipesExcepto(arrayPipes, contador);
     }
@@ -238,6 +248,7 @@ void GestionarPipesIO(int **arrayPipes, int contador) {
 
 void DestruirArrayPipes(int **arrayPipes) {
     int contador;
+    //Se cierran y se borran todos los pipes
     if (line->ncommands > 1) {/*En el caso de que solo haya un argumento el array de pipes será NULL*/
         for (contador = 0; contador < line->ncommands - 1; contador++) {
             close(arrayPipes[contador][0]);
@@ -255,9 +266,12 @@ void GestionarRedireccionesEntradaFichero(int contador) {
 
     if (contador == 0) {
         if (line->redirect_input != NULL) {
+            //Si hay una redireccion de fichero de entrada entonces se abre su descriptor para solo lectura
+            //y se comprueba si hubo algun error
             fileDescriptor = open(line->redirect_input, O_RDONLY);
             RevisarErrorAperturaFichero(fileDescriptor);
 
+            //Se sobreescribe el stdin del comando, se comprueba si hay algun error y se cierra el descriptor
             errorCode = dup2(fileDescriptor, 0);
             RevisarErrorDup2(errorCode);
             close(fileDescriptor);
@@ -270,10 +284,12 @@ void GestionarRedireccionesSalidaFichero(int contador) {
     int fileDescriptor;
 
     if (contador == line->ncommands - 1) {
+        //Si hay una redireccion de fichero de salida entonces se abre su descriptor para solo escritura, se crea
+        // si no existe, y si existe se borra,y se comprueba si hubo algun error
         if (line->redirect_output != NULL) {
-            fileDescriptor = creat(line->redirect_output, 0644);
+            fileDescriptor = open(line->redirect_output, O_CREAT | O_WRONLY | O_TRUNC, 0644);
             RevisarErrorCreacionFicheroStdout(fileDescriptor);
-
+            //Se sobreescribe el stdout del comando, se comprueba si hay algun error y se cierra el descriptor
             errorCode = dup2(fileDescriptor, 1);
             RevisarErrorDup2(errorCode);
             close(fileDescriptor);
@@ -286,10 +302,12 @@ void GestionarRedireccionesErrorFichero(int contador) {
     int fileDescriptor;
 
     if (contador == line->ncommands - 1) {
+        //Si hay una redireccion de fichero de error entonces se abre su descriptor para solo escritura, se crea
+        // si no existe, y si existe se borra,y se comprueba si hubo algun error
         if (line->redirect_error != NULL) {
-            fileDescriptor = creat(line->redirect_error, 0644);
+            fileDescriptor = open(line->redirect_output, O_CREAT | O_WRONLY | O_TRUNC, 0644);
             RevisarErrorCreacionFicheroStderr(fileDescriptor);
-
+            //Se sobreescribe el stderr del comando, se comprueba si hay algun error y se cierra el descriptor
             errorCode = dup2(fileDescriptor, 2);
             RevisarErrorDup2(errorCode);
             close(fileDescriptor);
@@ -305,7 +323,8 @@ void EsperarHijos(int *arrayPIDs) {
         waitpid(arrayPIDs[contador], NULL, 0);
     }
 }
-//comprueba como ha acabado el hijo
+
+//comprueba si ha acabado el hijo
 int HijoHaTerminado(int status) {
     if (WIFEXITED(status)) {
         return 1;
@@ -316,17 +335,20 @@ int HijoHaTerminado(int status) {
     return 0;
 
 }
-//se estableceran las señales del fg
+
+//se estableceran las señales del fg para que se pueda detener la ejecución con ellas
 void CambiarSenalesForeground() {
     signal(SIGINT, SIG_DFL);
     signal(SIGQUIT, SIG_DFL);
 }
-//se estableceran las señales del bg
+
+//se estableceran las señales del bg para que el hijo las ignore
 void CambiarSenalesBackground() {
     signal(SIGINT, SIG_IGN);
     signal(SIGQUIT, SIG_IGN);
 }
-//se comprueba que señal se debe cambiar
+
+//se comprueba a que señal se debe cambiar
 void AjustarSenalesProcesoHijo() {
     if (line->background == 0) {
         CambiarSenalesBackground();
@@ -335,6 +357,7 @@ void AjustarSenalesProcesoHijo() {
     }
 }
 
+//Se eliminan los procesos de bg que han terminado su ejecución
 void LimpiarJobs() {
     Nodo *cursor = jobs->head;
     Nodo *ant = NULL;
@@ -347,8 +370,8 @@ void LimpiarJobs() {
             EliminarCursor(cursor, ant);
             if (ant != NULL) {
                 cursor = ant->sig;
-            }else{
-                cursor=jobs->head;
+            } else {
+                cursor = jobs->head;
             }
         }
     }
@@ -362,16 +385,16 @@ void ExecuteCD(void) {
     if (line->commands[0].argv[1] == NULL) {
         dir = getenv("HOME");
     } else {
-        //si se introduce se establece como variable
+        //si se introduce un directorio se establece como variable
         dir = line->commands[0].argv[1];
     }
-    //comprobará si da error y sino se ejecutará
+    //Se ejecuta el cambio de directorio  y se comprueba si hay algún error
     errorInt = chdir(dir);
     RevisarErrorCd(dir, errorInt);
 }
 
 void ExecuteJOBS() {
-    /*Jobs como comando solo muestra los comandos en bg actualmente*/
+    /*Jobs como comando solo muestra los comandos en bg actualmente, que son los de la pila*/
     MostrarPila();
 }
 
@@ -384,7 +407,7 @@ void ExecuteFG() {
     } else {
         //Si no se introduce el pid deseado se pasa el ultimo añadido
         if (line->commands[0].argv[1] == NULL) {
-            pid = jobs->head->pid; 
+            pid = jobs->head->pid;
         } else {
             //Si no se toma de pantalla y se convierte a int
             pid = atoi(line->commands[0].argv[1]);
@@ -410,7 +433,7 @@ void Execute() {
         pid = fork();
         RevisarErrorFork(pid);
         arrayPIDs[contador] = pid;
-        //se comprobara que su pid es correcto, se gestionarán las redirecciones y los pipes y al final se ejecutará el comando con sus argumentos
+        //se comprobara mediante el pid si es el hijo, y si lo es se gestionarán las redirecciones y los pipes y al final se ejecutará el comando con sus argumentos
         if (pid == 0) {
             RevisarErrorMandato(contador);
             AjustarSenalesProcesoHijo();
@@ -458,6 +481,7 @@ int main(void) {
             } else {
                 pid = fork();
                 if (pid == 0) {
+                    //Si es el hijo simplemente se ejecuta el comando y después se hace exit
                     Execute();
                     exit(0);
                 } else {
