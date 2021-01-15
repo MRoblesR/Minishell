@@ -461,7 +461,7 @@ int main(void) {
     signal(SIGQUIT, SIG_IGN);
     //Cuando un hijo manda una señal de que ha terminado se ejecuta
     signal(SIGCHLD, LimpiarJobs);
-    printf("msh1> ");
+    printf("msh> ");
     //se lee de pantalla la línea introducida y luego se convierte en tokens
     while (fgets(buffer, 1024, stdin)) {
         line = tokenize(buffer);
