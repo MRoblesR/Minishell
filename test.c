@@ -425,8 +425,8 @@ void Execute() {
             exit(0);
         }
     }
-    DestruirArrayPipes(arrayPipes);
     EsperarHijos(arrayPIDs);
+    DestruirArrayPipes(arrayPipes);
     free(arrayPIDs);
 }
 
