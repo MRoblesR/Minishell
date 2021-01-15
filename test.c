@@ -186,13 +186,14 @@ void RevisarErrorCd(char *dir, int errorInt) {
 int **CrearArrayPipes() {
     int **arrayPipes;
     int contador;
-
+    //Si solo hay un comando no hace falta crear pipes
     if (line->ncommands == 1) {
-        return NULL;//Si solo hay un comando no hace falta crear pipes
+        return NULL;
     } else {
         arrayPipes = (int **) malloc(sizeof(int *) * line->ncommands - 1);
         for (contador = 0; contador < line->ncommands - 1; contador++) {
-            arrayPipes[contador] = (int *) malloc(sizeof(int) * 2);//Se crean dos int que actuarán como pipe
+            //Se crean dos int que actuarán como pipe
+            arrayPipes[contador] = (int *) malloc(sizeof(int) * 2);
             pipe(arrayPipes[contador]);
         }
         return arrayPipes;
@@ -297,13 +298,14 @@ void GestionarRedireccionesErrorFichero(int contador) {
 }
 
 /*---------------------Gestión de hijos----------------*/
+//se esperan a los hijos creados
 void EsperarHijos(int *arrayPIDs) {
     int contador;
     for (contador = 0; contador < line->ncommands; contador++) {
         waitpid(arrayPIDs[contador], NULL, 0);
     }
 }
-
+//comprueba como ha acabado el hijo
 int HijoHaTerminado(int status) {
     if (WIFEXITED(status)) {
         return 1;
@@ -314,17 +316,17 @@ int HijoHaTerminado(int status) {
     return 0;
 
 }
-
+//se estableceran las señales del fg
 void CambiarSenalesForeground() {
     signal(SIGINT, SIG_DFL);
     signal(SIGQUIT, SIG_DFL);
 }
-
+//se estableceran las señales del bg
 void CambiarSenalesBackground() {
     signal(SIGINT, SIG_IGN);
     signal(SIGQUIT, SIG_IGN);
 }
-
+//se comprueba que señal se debe cambiar
 void AjustarSenalesProcesoHijo() {
     if (line->background == 0) {
         CambiarSenalesBackground();
@@ -337,10 +339,11 @@ void LimpiarJobs() {
     Nodo *cursor = jobs->head;
     Nodo *ant = NULL;
     int status;
-
+    //si la pila no sta vacia se comprobará si el hijo ha acabado o no
     while (cursor != NULL) {
-        waitpid(cursor->pid, &status, WNOHANG); //todo no sé si esto funciona así
+        waitpid(cursor->pid, &status, WNOHANG);
         if (HijoHaTerminado(status)) {
+            //si ha acabado lo elimina de la pila
             EliminarCursor(cursor, ant);
             if (ant != NULL) {
                 cursor = ant->sig;
@@ -355,13 +358,14 @@ void LimpiarJobs() {
 void ExecuteCD(void) {
     char *dir;
     int errorInt;
-
+    //si no se introduce un directorio nos llevará a $HOME
     if (line->commands[0].argv[1] == NULL) {
         dir = getenv("HOME");
     } else {
+        //si se introduce se establece como variable
         dir = line->commands[0].argv[1];
     }
-
+    //comprobará si da error y sino se ejecutará
     errorInt = chdir(dir);
     RevisarErrorCd(dir, errorInt);
 }
@@ -374,14 +378,18 @@ void ExecuteJOBS() {
 void ExecuteFG() {
     pid_t pid;
     CambiarSenalesForeground();
+    //si la pila esta vacia es que no hay comandos ejecutandose en bg
     if (jobs->head == NULL) {
         printf("No hay comandos en bg\n");
     } else {
+        //Si no se introduce el pid deseado se pasa el ultimo añadido
         if (line->commands[0].argv[1] == NULL) {
-            pid = jobs->head->pid; //Si no se introduce el pid deseado se pasa el ultimo añadido
+            pid = jobs->head->pid; 
         } else {
+            //Si no se toma de pantalla y se convierte a int
             pid = atoi(line->commands[0].argv[1]);
         }
+        //se esperará al hijo y luego se eliminara su pid de la pila
         waitpid(pid, NULL, 0);
         EliminarPID(pid);
     }
@@ -392,16 +400,17 @@ void Execute() {
     int *arrayPIDs;
     int contador;
     pid_t pid;
-
+    //se creará un array de pids y de pipes
     arrayPIDs = malloc(sizeof(pid_t) * line->ncommands);
 
     arrayPipes = CrearArrayPipes();
-
+    //se ejecutará tantas veces como argumentos hayan sido introducidos
     for (contador = 0; contador < line->ncommands; contador++) {
+        //se creará un hijo por cada comando, se verá si hay error y se almacenará su pid
         pid = fork();
         RevisarErrorFork(pid);
         arrayPIDs[contador] = pid;
-
+        //se comprobara que su pid es correcto, se gestionarán las redirecciones y los pipes y al final se ejecutará el comando con sus argumentos
         if (pid == 0) {
             RevisarErrorMandato(contador);
             AjustarSenalesProcesoHijo();
@@ -413,6 +422,7 @@ void Execute() {
             exit(0);
         }
     }
+    // se esperará a que los hijos acaben y luego se eliminaran los arrays de pipes y pids creados al principio
     EsperarHijos(arrayPIDs);
     DestruirArrayPipes(arrayPipes);
     free(arrayPIDs);
@@ -423,13 +433,16 @@ int main(void) {
     char buffer[1024];
     pid_t pid;
     jobs = InicializarPila();
-
+    //Se ignoran las señales de teclado de terminación
     signal(SIGINT, SIG_IGN);
-    signal(SIGQUIT, SIG_IGN);//Se ignoran las señales de teclado de terminación
-    signal(SIGCHLD, LimpiarJobs);//Cuando un hijo manda una señal de que ha terminado se ejecuta
+    signal(SIGQUIT, SIG_IGN);
+    //Cuando un hijo manda una señal de que ha terminado se ejecuta
+    signal(SIGCHLD, LimpiarJobs);
     printf("msh1> ");
+    //se lee de pantalla la línea introducida y luego se convierte en tokens
     while (fgets(buffer, 1024, stdin)) {
         line = tokenize(buffer);
+        //dependiendo de cual sea el primer argumento se ejecutaran diferentes funciones
         if (strcmp(line->commands[0].argv[0], "cd") == 0) {
             ExecuteCD();
         } else if (strcmp(line->commands[0].argv[0], "jobs") == 0) {
@@ -439,6 +452,7 @@ int main(void) {
         } else if (strcmp(line->commands[0].argv[0], "fg") == 0) {
             ExecuteFG();
         } else {
+            // si no es ninguno de los comandos anteriores se comprobara si esta en bg o en fg
             if (line->background == 0) {
                 Execute();
             } else {
@@ -447,7 +461,8 @@ int main(void) {
                     Execute();
                     exit(0);
                 } else {
-                    AnnadirNodoALaPila(buffer, pid);// La espera se produce cuando un hijo manda la señal SIGCHLD
+                    //la espera se produce cuando un hijo manda la señal SIGCHLD
+                    AnnadirNodoALaPila(buffer, pid);
                 }
             }
         }
